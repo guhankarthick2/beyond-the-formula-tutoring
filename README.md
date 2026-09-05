@@ -7,8 +7,8 @@ Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, sessi
 ## Stack
 
 - Vite + React + TypeScript
-- Supabase (Auth magic links, Postgres, Row Level Security, Realtime broadcast chat)
-- Host free on Cloudflare Pages or Netlify
+- Supabase (Auth: Google OAuth + email/password, Postgres, Row Level Security, Realtime broadcast chat)
+- Host free on GitHub Pages, Cloudflare Pages, or Netlify
 
 ## Setup
 
@@ -16,10 +16,37 @@ Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, sessi
 
 1. Go to [supabase.com](https://supabase.com) → New project
 2. Open **SQL Editor** → paste and run `supabase/schema.sql`
-3. **Authentication → Providers → Email**: enable email OTP / magic link
-4. **Authentication → URL configuration**: set Site URL to your local or production URL (e.g. `http://localhost:5173`)
+3. If the project already existed, also run newer migrations under `supabase/migrations/` (including `004_auth_display_name_fallbacks.sql`)
 
-### 2. Configure the app
+### 2. Configure Auth (required for secure sign-in)
+
+#### Email / password
+1. **Authentication → Providers → Email**: enable Email provider
+2. Turn **Confirm email** ON for new registrations
+3. Leave magic-link/OTP optional (the app uses password + Google)
+
+#### Google OAuth
+1. Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Web application)
+2. Authorized JavaScript origins: `http://localhost:3001` and your production origin (e.g. `https://guhankarthick2.github.io`)
+3. Authorized redirect URIs: your Supabase callback  
+   `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
+4. **Authentication → Providers → Google**: enable, paste Client ID and Client Secret
+
+#### URL configuration
+**Authentication → URL configuration**
+- **Site URL** (production): `https://guhankarthick2.github.io/beyond-the-formula-tutoring/`
+- **Redirect URLs** allow list:
+  - `http://localhost:3001/**`
+  - `https://guhankarthick2.github.io/beyond-the-formula-tutoring/**`
+
+#### Session / JWT (token refresh without constant re-login)
+**Authentication → Sessions** (or JWT settings, depending on dashboard version):
+- **JWT expiry**: `14400` seconds (**4 hours**) — short-lived access token
+- **Refresh / session inactivity**: about **7 days** — silent refresh keeps users signed in while they work; after ~a week idle they sign in again
+
+The app client uses Supabase defaults: `autoRefreshToken`, `persistSession`, `detectSessionInUrl`, and PKCE. Do **not** put the **service role** key in the frontend or GitHub Pages secrets.
+
+### 3. Configure the app
 
 ```bash
 cp .env.example .env
@@ -34,16 +61,16 @@ Fill in:
 | `VITE_VOLUNTEER_INTRO_VIDEO_URL` | YouTube embed URL for your tutor intro |
 | `VITE_YOUTUBE_CHANNEL_URL` | Your channel URL |
 
-### 3. Run locally
+### 4. Run locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-### 4. Become admin
+### 5. Become admin
 
-1. Sign in once (magic link)
+1. Sign in once (Google or email/password)
 2. Open **Admin** in the nav — it shows a SQL snippet with your user id
 3. Run that update in Supabase SQL Editor
 4. Refresh — you can approve tutors, moderate content, and edit topics
@@ -51,20 +78,29 @@ npm run dev
 If you already ran an older `schema.sql`, also run  
 `supabase/migrations/002_admin_moderation.sql` once for delete/purge tools.
 
-### 5. Deploy (free)
+### 6. Deploy (free)
 
 **GitHub Pages (this repo):** pushes to `main` run `.github/workflows/deploy.yml`, which builds Vite and publishes `dist/`.
 
 1. Repo **Settings → Pages → Build and deployment → Source: GitHub Actions** (required once; branch/`/` serving of source will stay blank)
-2. Optional: add repository secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` so Auth/API work in production
-3. Add `https://guhankarthick2.github.io/beyond-the-formula-tutoring` to Supabase Auth redirect URLs
+2. Add repository secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` so Auth/API work in production
+3. Keep the production URL in Supabase Auth Site URL + Redirect allow list (see above)
 
 **Other hosts:** `npm run build`, then publish `dist/` to [Cloudflare Pages](https://pages.cloudflare.com) or Netlify (set the same `VITE_*` env vars). For a root domain, leave Vite `base` as `/` (do not set `GITHUB_REPOSITORY` / `VITE_BASE_PATH`).
+
+## Security notes
+
+- **RLS is the real lock** — UI routes are not security boundaries
+- Browser only uses the **anon** key + the user’s session; never ship the service role key
+- Passwords are stored by Supabase Auth (hashed), not in `profiles`
+- Access JWTs rotate about every 4 hours; refresh is automatic until the ~7-day session ends
+- Prefer Google for students when possible (no password to phish); email/password supports forgot-password recovery
 
 ## Features
 
 | Flow | Behavior |
 |------|----------|
+| Auth | Google OAuth or email/password; register, sign-in, forgot password |
 | Volunteer | Watch intro video → accept expectations → apply → admin approve |
 | Availability | Tutor posts date + curated topic or “Any topic” |
 | Book | Students book open slots |
@@ -85,7 +121,7 @@ If you already ran an older `schema.sql`, also run
 Typical early usage stays on free tiers:
 
 - Domain ~$10–15/year (optional)
-- Cloudflare Pages / Netlify: $0
+- GitHub Pages / Cloudflare Pages / Netlify: $0
 - Supabase free tier: $0 until you outgrow limits
 
 ## Promote yourself to admin (manual)

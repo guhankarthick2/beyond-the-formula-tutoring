@@ -101,11 +101,18 @@ set search_path = public
 as $$
 declare
   chosen_name text;
+  email_local text;
 begin
+  email_local := split_part(coalesce(new.email, ''), '@', 1);
+
   chosen_name := coalesce(
     nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''),
+    nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''),
+    nullif(trim(new.raw_user_meta_data ->> 'name'), ''),
+    nullif(trim(email_local), ''),
     'Learner'
   );
+
   if char_length(chosen_name) < 2 then
     chosen_name := 'Learner';
   end if;

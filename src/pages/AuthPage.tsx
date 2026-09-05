@@ -1,30 +1,195 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 
-export function AuthPage() {
-  const { user, signInWithMagicLink, configured } = useAuth()
-  const [email, setEmail] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [sent, setSent] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+type AuthMode = 'signin' | 'register' | 'forgot' | 'recovery'
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
+export function AuthPage() {
+  const {
+    user,
+    profile,
+    configured,
+    loading,
+    passwordRecovery,
+    signInWithGoogle,
+    signUpWithPassword,
+    signInWithPassword,
+    resetPasswordForEmail,
+    updatePassword,
+    updateDisplayName,
+  } = useAuth()
+
+  const [mode, setMode] = useState<AuthMode>('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [nameBusy, setNameBusy] = useState(false)
+
+  useEffect(() => {
+    if (passwordRecovery) {
+      setMode('recovery')
+      setError(null)
+      setInfo('Choose a new password for your account.')
+      setPassword('')
+      setConfirmPassword('')
+    }
+  }, [passwordRecovery])
+
+  function switchMode(next: AuthMode) {
+    setMode(next)
     setError(null)
-    setBusy(true)
-    const { error: err } = await signInWithMagicLink(email, displayName)
-    setBusy(false)
-    if (err) setError(err)
-    else setSent(true)
+    setInfo(null)
+    setPassword('')
+    setConfirmPassword('')
   }
 
-  if (user) {
+  async function onGoogle() {
+    setError(null)
+    setBusy(true)
+    const { error: err } = await signInWithGoogle()
+    setBusy(false)
+    if (err) setError(err)
+  }
+
+  async function onSignIn(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+    setBusy(true)
+    const { error: err } = await signInWithPassword(email, password)
+    setBusy(false)
+    if (err) setError(err)
+  }
+
+  async function onRegister(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+    setBusy(true)
+    const { error: err, needsEmailConfirmation } = await signUpWithPassword(
+      email,
+      password,
+      displayName,
+    )
+    setBusy(false)
+    if (err) {
+      setError(err)
+      return
+    }
+    if (needsEmailConfirmation) {
+      setInfo('Check your email to confirm your account, then sign in.')
+      setMode('signin')
+      setPassword('')
+      setConfirmPassword('')
+    }
+  }
+
+  async function onForgot(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+    setBusy(true)
+    const { error: err } = await resetPasswordForEmail(email)
+    setBusy(false)
+    if (err) {
+      setError(err)
+      return
+    }
+    setInfo('If that email is registered, you will receive a password reset link shortly.')
+  }
+
+  async function onRecovery(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+    setBusy(true)
+    const { error: err } = await updatePassword(password)
+    setBusy(false)
+    if (err) {
+      setError(err)
+      return
+    }
+    setInfo('Password updated. You are signed in.')
+    setMode('signin')
+    setPassword('')
+    setConfirmPassword('')
+  }
+
+  async function onDisplayName(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setNameBusy(true)
+    const { error: err } = await updateDisplayName(displayName)
+    setNameBusy(false)
+    if (err) setError(err)
+  }
+
+  if (loading) {
     return (
-      <section className="section">
+      <section className="section" style={{ maxWidth: '28rem' }}>
+        <h1 className="page-title">Sign in</h1>
+        <p className="lead">Checking your session…</p>
+      </section>
+    )
+  }
+
+  if (user && mode !== 'recovery') {
+    const needsName = !profile?.display_name || profile.display_name === 'Learner'
+
+    return (
+      <section className="section" style={{ maxWidth: '28rem' }}>
         <h1 className="page-title">You are signed in</h1>
-        <p className="lead">Head to your dashboard or browse open sessions.</p>
+        <p className="lead">
+          {profile?.display_name
+            ? `Signed in as ${profile.display_name}.`
+            : 'Your session is active.'}{' '}
+          Head to your dashboard or browse open sessions.
+        </p>
+
+        {needsName && (
+          <form className="form card" onSubmit={(e) => void onDisplayName(e)} style={{ marginBottom: '1rem' }}>
+            <p className="muted" style={{ margin: 0 }}>
+              Pick a public display name (email stays private).
+            </p>
+            <label>
+              Display name
+              <input
+                required
+                minLength={2}
+                maxLength={40}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="e.g. Alex P"
+                autoComplete="nickname"
+              />
+            </label>
+            {error && <div className="alert alert-error">{error}</div>}
+            <button className="btn btn-secondary" type="submit" disabled={nameBusy}>
+              {nameBusy ? 'Saving…' : 'Save display name'}
+            </button>
+          </form>
+        )}
+
         <div className="btn-group">
           <Link className="btn btn-primary" to="/dashboard">
             Dashboard
@@ -39,10 +204,23 @@ export function AuthPage() {
 
   return (
     <section className="section" style={{ maxWidth: '28rem' }}>
-      <h1 className="page-title">Sign in</h1>
+      <h1 className="page-title">
+        {mode === 'register'
+          ? 'Create account'
+          : mode === 'forgot'
+            ? 'Reset password'
+            : mode === 'recovery'
+              ? 'Set new password'
+              : 'Sign in'}
+      </h1>
       <p className="lead">
-        Magic-link login. We only use your email to send the link — it is never shown on the site.
-        Pick a display name students and tutors will see.
+        {mode === 'register'
+          ? 'Register with email or continue with Google. We never show your email on the site.'
+          : mode === 'forgot'
+            ? 'We will email you a secure link to choose a new password.'
+            : mode === 'recovery'
+              ? 'Enter a new password for your account.'
+              : 'Sign in with Google or email. Sessions refresh quietly for about a week.'}
       </p>
 
       {!configured && (
@@ -51,12 +229,82 @@ export function AuthPage() {
         </div>
       )}
 
-      {sent ? (
-        <div className="alert alert-ok">
-          Check your email for the sign-in link. You can close this tab after clicking it.
+      {mode !== 'recovery' && mode !== 'forgot' && (
+        <div className="auth-tabs" role="tablist" aria-label="Auth mode">
+          <button
+            type="button"
+            role="tab"
+            className={mode === 'signin' ? 'auth-tab active' : 'auth-tab'}
+            aria-selected={mode === 'signin'}
+            onClick={() => switchMode('signin')}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={mode === 'register' ? 'auth-tab active' : 'auth-tab'}
+            aria-selected={mode === 'register'}
+            onClick={() => switchMode('register')}
+          >
+            Register
+          </button>
         </div>
-      ) : (
-        <form className="form card" onSubmit={(e) => void onSubmit(e)}>
+      )}
+
+      {mode !== 'recovery' && mode !== 'forgot' && (
+        <>
+          <button
+            className="btn btn-secondary auth-google"
+            type="button"
+            disabled={busy || !configured}
+            onClick={() => void onGoogle()}
+          >
+            Continue with Google
+          </button>
+          <div className="auth-divider" aria-hidden="true">
+            <span>or</span>
+          </div>
+        </>
+      )}
+
+      {mode === 'signin' && (
+        <form className="form card" onSubmit={(e) => void onSignIn(e)}>
+          <label>
+            Email
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+          </label>
+          <label>
+            Password
+            <input
+              required
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              minLength={8}
+            />
+          </label>
+          {error && <div className="alert alert-error">{error}</div>}
+          {info && <div className="alert alert-ok">{info}</div>}
+          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+            {busy ? 'Signing in…' : 'Sign in'}
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => switchMode('forgot')}>
+            Forgot password?
+          </button>
+        </form>
+      )}
+
+      {mode === 'register' && (
+        <form className="form card" onSubmit={(e) => void onRegister(e)}>
           <label>
             Display name
             <input
@@ -80,9 +328,88 @@ export function AuthPage() {
               autoComplete="email"
             />
           </label>
+          <label>
+            Password
+            <input
+              required
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+            />
+          </label>
+          <label>
+            Confirm password
+            <input
+              required
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+            />
+          </label>
           {error && <div className="alert alert-error">{error}</div>}
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            {busy ? 'Sending…' : 'Email me a magic link'}
+          {info && <div className="alert alert-ok">{info}</div>}
+          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+            {busy ? 'Creating account…' : 'Create account'}
+          </button>
+        </form>
+      )}
+
+      {mode === 'forgot' && (
+        <form className="form card" onSubmit={(e) => void onForgot(e)}>
+          <label>
+            Email
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+          </label>
+          {error && <div className="alert alert-error">{error}</div>}
+          {info && <div className="alert alert-ok">{info}</div>}
+          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+            {busy ? 'Sending…' : 'Send reset link'}
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => switchMode('signin')}>
+            Back to sign in
+          </button>
+        </form>
+      )}
+
+      {mode === 'recovery' && (
+        <form className="form card" onSubmit={(e) => void onRecovery(e)}>
+          <label>
+            New password
+            <input
+              required
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+            />
+          </label>
+          <label>
+            Confirm new password
+            <input
+              required
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+            />
+          </label>
+          {error && <div className="alert alert-error">{error}</div>}
+          {info && <div className="alert alert-ok">{info}</div>}
+          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+            {busy ? 'Saving…' : 'Update password'}
           </button>
         </form>
       )}

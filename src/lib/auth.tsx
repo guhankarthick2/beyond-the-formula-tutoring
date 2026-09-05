@@ -7,9 +7,11 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { isSupabaseConfigured, supabase } from './supabase'
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
+import { authRedirectTo, isSupabaseConfigured, supabase } from './supabase'
 import type { Profile } from './types'
+
+type AuthResult = { error: string | null }
 
 interface AuthContextValue {
   configured: boolean
@@ -17,14 +19,47 @@ interface AuthContextValue {
   session: Session | null
   user: User | null
   profile: Profile | null
+  passwordRecovery: boolean
+  clearPasswordRecovery: () => void
   refreshProfile: () => Promise<void>
-  signInWithMagicLink: (email: string, displayName: string) => Promise<{ error: string | null }>
+  signInWithGoogle: () => Promise<AuthResult>
+  signUpWithPassword: (
+    email: string,
+    password: string,
+    displayName: string,
+  ) => Promise<AuthResult & { needsEmailConfirmation?: boolean }>
+  signInWithPassword: (email: string, password: string) => Promise<AuthResult>
+  resetPasswordForEmail: (email: string) => Promise<AuthResult>
+  updatePassword: (newPassword: string) => Promise<AuthResult>
+  updateDisplayName: (displayName: string) => Promise<AuthResult>
   signOut: () => Promise<void>
   isApprovedTutor: boolean
   isAdmin: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+
+const notConfigured: AuthResult = {
+  error: 'Supabase is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.',
+}
+
+function friendlyAuthError(message: string | undefined): string {
+  if (!message) return 'Something went wrong. Please try again.'
+  const lower = message.toLowerCase()
+  if (lower.includes('invalid login credentials')) {
+    return 'Incorrect email or password.'
+  }
+  if (lower.includes('email not confirmed')) {
+    return 'Confirm your email before signing in. Check your inbox for the link.'
+  }
+  if (lower.includes('user already registered')) {
+    return 'An account with that email already exists. Sign in instead.'
+  }
+  if (lower.includes('password')) {
+    return message
+  }
+  return message
+}
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
@@ -43,6 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [passwordRecovery, setPasswordRecovery] = useState(false)
+
+  const clearPasswordRecovery = useCallback(() => {
+    setPasswordRecovery(false)
+  }, [])
 
   const refreshProfile = useCallback(async () => {
     if (!session?.user) {
@@ -67,8 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, next) => {
       setSession(next)
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true)
+      }
+      if (event === 'SIGNED_OUT') {
+        setPasswordRecovery(false)
+      }
     })
 
     return () => {
@@ -85,23 +131,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void fetchProfile(session.user.id).then(setProfile)
   }, [session?.user])
 
-  const signInWithMagicLink = useCallback(async (email: string, displayName: string) => {
-    if (!isSupabaseConfigured) {
-      return { error: 'Supabase is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.' }
-    }
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
+  const signInWithGoogle = useCallback(async (): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) return notConfigured
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
       options: {
-        data: { display_name: displayName.trim() },
-        emailRedirectTo: window.location.origin,
+        redirectTo: authRedirectTo('auth'),
+        queryParams: { prompt: 'select_account' },
       },
     })
-    return { error: error?.message ?? null }
+    return { error: error ? friendlyAuthError(error.message) : null }
   }, [])
+
+  const signUpWithPassword = useCallback(
+    async (
+      email: string,
+      password: string,
+      displayName: string,
+    ): Promise<AuthResult & { needsEmailConfirmation?: boolean }> => {
+      if (!isSupabaseConfigured) return notConfigured
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: { display_name: displayName.trim() },
+          emailRedirectTo: authRedirectTo('auth'),
+        },
+      })
+      if (error) return { error: friendlyAuthError(error.message) }
+      const needsEmailConfirmation = !data.session
+      return { error: null, needsEmailConfirmation }
+    },
+    [],
+  )
+
+  const signInWithPassword = useCallback(async (email: string, password: string): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) return notConfigured
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+    return { error: error ? friendlyAuthError(error.message) : null }
+  }, [])
+
+  const resetPasswordForEmail = useCallback(async (email: string): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) return notConfigured
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: authRedirectTo('auth'),
+    })
+    return { error: error ? friendlyAuthError(error.message) : null }
+  }, [])
+
+  const updatePassword = useCallback(async (newPassword: string): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) return notConfigured
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (!error) setPasswordRecovery(false)
+    return { error: error ? friendlyAuthError(error.message) : null }
+  }, [])
+
+  const updateDisplayName = useCallback(
+    async (displayName: string): Promise<AuthResult> => {
+      if (!isSupabaseConfigured) return notConfigured
+      if (!session?.user) return { error: 'You must be signed in to update your display name.' }
+      const name = displayName.trim()
+      if (name.length < 2 || name.length > 40) {
+        return { error: 'Display name must be between 2 and 40 characters.' }
+      }
+      const { error } = await supabase.from('profiles').update({ display_name: name }).eq('id', session.user.id)
+      if (error) return { error: friendlyAuthError(error.message) }
+      await refreshProfile()
+      return { error: null }
+    },
+    [session?.user, refreshProfile],
+  )
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     setProfile(null)
+    setPasswordRecovery(false)
   }, [])
 
   const value = useMemo<AuthContextValue>(
@@ -111,15 +218,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user: session?.user ?? null,
       profile,
+      passwordRecovery,
+      clearPasswordRecovery,
       refreshProfile,
-      signInWithMagicLink,
+      signInWithGoogle,
+      signUpWithPassword,
+      signInWithPassword,
+      resetPasswordForEmail,
+      updatePassword,
+      updateDisplayName,
       signOut,
       isApprovedTutor:
         profile?.tutor_status === 'approved' &&
         (profile.role === 'tutor' || profile.role === 'admin'),
       isAdmin: profile?.role === 'admin',
     }),
-    [loading, session, profile, refreshProfile, signInWithMagicLink, signOut],
+    [
+      loading,
+      session,
+      profile,
+      passwordRecovery,
+      clearPasswordRecovery,
+      refreshProfile,
+      signInWithGoogle,
+      signUpWithPassword,
+      signInWithPassword,
+      resetPasswordForEmail,
+      updatePassword,
+      updateDisplayName,
+      signOut,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
