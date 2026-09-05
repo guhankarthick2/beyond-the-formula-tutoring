@@ -232,7 +232,7 @@ export function StudentMySessionsPage() {
                 Precal hub
               </Link>
               <Link className="badge badge-blue" to="/students/resources/precal">
-                Free resources
+                Free Resources
               </Link>
               <a className="badge badge-amber" href="https://www.youtube.com/@beyondtheformulatutoring" rel="noopener noreferrer">
                 YouTube

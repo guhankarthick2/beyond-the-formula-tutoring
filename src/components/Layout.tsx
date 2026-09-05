@@ -1,16 +1,8 @@
-import { Link, NavLink, useLocation } from 'react-router-dom'
-import { SubjectSelect } from '@/components/SubjectSelect'
+import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, signOut, isApprovedTutor, isAdmin } = useAuth()
-  const location = useLocation()
-  const onStudentFlow = location.pathname.startsWith('/students')
-  const subjectSelectMode = location.pathname.includes('/resources')
-    ? 'resources'
-    : location.pathname.includes('/schedule')
-      ? 'schedule'
-      : 'hub'
 
   return (
     <>
@@ -31,11 +23,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               Student hub
             </NavLink>
             <NavLink className="btn btn-ghost" to="/students/resources">
-              Free resources
+              Free Resources
             </NavLink>
-            {onStudentFlow && (
-              <SubjectSelect id="subject-select-nav" mode={subjectSelectMode} />
-            )}
             <NavLink className="btn btn-ghost" to="/mentors">
               Mentors
             </NavLink>

@@ -10,3 +10,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+declare module '@/unit1/unit1-quiz.js' {
+  export function initUnit1Quiz(container: HTMLElement): () => void
+}

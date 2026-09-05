@@ -12,8 +12,10 @@ import { RequestPage } from '@/pages/RequestPage'
 import { ResourcesPage } from '@/pages/ResourcesPage'
 import { ScheduleRedirect, SessionsPage } from '@/pages/SessionsPage'
 import { StuckDetailPage, StuckListPage } from '@/pages/StuckPage'
+import { RecordingsPage } from '@/pages/RecordingsPage'
 import { StudentHubPage, StudentSubjectPage } from '@/pages/StudentHubPage'
 import { StudentMySessionsPage } from '@/pages/StudentMySessionsPage'
+import { Unit1TestPage } from '@/pages/Unit1TestPage'
 
 export default function App() {
   return (
@@ -24,13 +26,15 @@ export default function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/students" element={<StudentHubPage />} />
-              <Route path="/students/:subjectSlug" element={<StudentSubjectPage />} />
-              <Route path="/students/:subjectSlug/schedule" element={<SessionsPage />} />
-              <Route path="/students/schedule" element={<ScheduleRedirect />} />
               <Route path="/students/resources" element={<ResourcesPage />} />
               <Route path="/students/resources/:subjectSlug" element={<ResourcesPage />} />
+              <Route path="/students/schedule" element={<ScheduleRedirect />} />
               <Route path="/students/my-sessions" element={<StudentMySessionsPage />} />
-              <Route path="/students/tests" element={<Navigate to="/students/resources/precal" replace />} />
+              <Route path="/students/tests" element={<Navigate to="/students/precal/tests/unit-1" replace />} />
+              <Route path="/students/precal/tests/unit-1" element={<Unit1TestPage />} />
+              <Route path="/students/:subjectSlug" element={<StudentSubjectPage />} />
+              <Route path="/students/:subjectSlug/schedule" element={<SessionsPage />} />
+              <Route path="/students/:subjectSlug/recordings" element={<RecordingsPage />} />
               <Route path="/mentors" element={<MentorHomePage />} />
               <Route path="/mentors/dashboard" element={<MentorDashboardPage />} />
               <Route path="/auth" element={<AuthPage />} />

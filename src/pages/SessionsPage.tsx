@@ -98,7 +98,7 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
           Browse mentor sessions — no account needed to view.{' '}
           <Link to={hubPath}>Back to {subject?.shortName ?? 'student'} hub</Link>
           {' · '}
-          <Link to={resourcesPath}>Free resources</Link>
+          <Link to={resourcesPath}>Free Resources</Link>
         </p>
         {subject && (
           <div className="subject-toolbar">

@@ -11,7 +11,7 @@ export interface ImpactStats {
 }
 
 const DEMO_STATS: ImpactStats = {
-  sessions_completed: 12,
+  sessions_completed: 16,
   students_enrolled: 8,
   students_benefited: 24,
   mentors_active: 3,

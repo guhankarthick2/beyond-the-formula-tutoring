@@ -62,11 +62,8 @@ export function HomePage() {
         </p>
         <div className="stat-grid">
           <StatCard value={stats.sessions_completed} label="Sessions completed" accent="green" />
-          <StatCard value={stats.students_enrolled} label="Students enrolled" accent="blue" />
           <StatCard value={stats.students_benefited} label="Students benefited" accent="violet" />
           <StatCard value={stats.mentors_active} label="Active mentors" accent="amber" />
-          <StatCard value={stats.open_sessions} label="Open sessions" accent="green" />
-          <StatCard value={stats.page_visits.toLocaleString()} label="Page visits" accent="blue" />
         </div>
       </section>
 
@@ -127,7 +124,7 @@ export function HomePage() {
               Browse sessions
             </Link>
             <Link className="btn btn-secondary" to="/students/resources">
-              Free resources
+              Free Resources
             </Link>
           </div>
         </div>

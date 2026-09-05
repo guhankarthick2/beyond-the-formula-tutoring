@@ -10,12 +10,27 @@ export interface SubjectResource {
   comingSoon?: boolean
 }
 
+export interface SubjectRecording {
+  slug: string
+  name: string
+  details: string
+  href?: string
+}
+
 export interface Subject {
   slug: string
   name: string
   shortName: string
   description: string
   resources: SubjectResource[]
+  recordings: SubjectRecording[]
+}
+
+const YOUTUBE_CHANNEL = 'https://www.youtube.com/@beyondtheformulatutoring'
+
+export function topicRecordingUrl(topicName: string, youtubeUrl?: string | null) {
+  if (youtubeUrl) return youtubeUrl
+  return `${YOUTUBE_CHANNEL}/search?query=${encodeURIComponent(topicName)}`
 }
 
 export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
@@ -29,9 +44,46 @@ export const SUBJECTS: Subject[] = [
   {
     slug: 'precal',
     name: 'Precalculus',
-    shortName: 'Precal',
+    shortName: 'PreCal',
     description:
       'Functions, trigonometry, polynomials, and AP Precalculus prep — free sessions and open resources.',
+    recordings: [
+      {
+        slug: 'functions',
+        name: 'Functions',
+        details: 'Function families, transformations, inverses, and composition.',
+      },
+      {
+        slug: 'trigonometry',
+        name: 'Trigonometry',
+        details: 'Unit circle, identities, graphs, and solving trig equations.',
+      },
+      {
+        slug: 'polynomials',
+        name: 'Polynomials',
+        details: 'Zeros, factoring, end behavior, and rational functions.',
+      },
+      {
+        slug: 'exponents-logs',
+        name: 'Exponents & logs',
+        details: 'Exponential growth and decay, log laws, and solving equations.',
+      },
+      {
+        slug: 'sequences-series',
+        name: 'Sequences & series',
+        details: 'Arithmetic and geometric sequences, sigma notation, and series.',
+      },
+      {
+        slug: 'conic-sections',
+        name: 'Conic sections',
+        details: 'Circles, ellipses, parabolas, and hyperbolas.',
+      },
+      {
+        slug: 'limits-intro-calculus',
+        name: 'Limits & intro calculus',
+        details: 'Limits, continuity, and a first look at derivatives.',
+      },
+    ],
     resources: [
       {
         id: 'precal-unit1',
@@ -39,8 +91,7 @@ export const SUBJECTS: Subject[] = [
         title: 'AP Precalculus — Unit 1',
         description:
           '40-question interactive assessment with per-question feedback and a question navigator.',
-        href: '/students/resources/precal#unit1',
-        comingSoon: true,
+        href: '/students/precal/tests/unit-1',
       },
       {
         id: 'precal-youtube',
@@ -72,7 +123,7 @@ export const SUBJECTS: Subject[] = [
 export const COMING_SOON_SUBJECTS = [
   { slug: 'algebra', name: 'Algebra' },
   { slug: 'calculus', name: 'Calculus' },
-  { slug: 'physics', name: 'Physics' },
+  { slug: 'sat', name: 'SAT' },
 ]
 
 export function getSubject(slug: string | undefined | null): Subject | undefined {
