@@ -88,8 +88,13 @@ If you already ran an older `schema.sql`, also run
 **GitHub Pages (this repo):** pushes to `main` run `.github/workflows/deploy.yml`, which builds Vite and publishes `dist/`.
 
 1. Repo **Settings → Pages → Build and deployment → Source: GitHub Actions** (required once; branch/`/` serving of source will stay blank)
-2. Add repository secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` so Auth/API work in production
-3. Keep the production URL in Supabase Auth Site URL + Redirect allow list (see above)
+2. Add **repository** Actions secrets (not only the `github-pages` environment):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`  
+   Path: **Settings → Secrets and variables → Actions → Repository secrets**  
+   Vite embeds these at **build** time; the build job cannot see environment-only secrets.
+3. Re-run **Deploy GitHub Pages** (or push to `main`) after adding/changing secrets
+4. Keep the production URL in Supabase Auth Site URL + Redirect allow list (see above)
 
 **Other hosts:** `npm run build`, then publish `dist/` to [Cloudflare Pages](https://pages.cloudflare.com) or Netlify (set the same `VITE_*` env vars). For a root domain, leave Vite `base` as `/` (do not set `GITHUB_REPOSITORY` / `VITE_BASE_PATH`).
 
@@ -132,6 +137,17 @@ Typical early usage stays on free tiers:
 ## Promote yourself to admin (manual)
 
 ```sql
+-- Run migration 005 once (or the function body in supabase/migrations/005_*.sql), then:
+update public.profiles
+set role = 'admin', tutor_status = 'approved'
+where id = 'YOUR_USER_UUID';
+```
+
+Or in one SQL Editor batch without the migration:
+
+```sql
+select set_config('app.allow_tutor_apply', 'on', true);
+
 update public.profiles
 set role = 'admin', tutor_status = 'approved'
 where id = 'YOUR_USER_UUID';

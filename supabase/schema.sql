@@ -222,7 +222,11 @@ begin
   if public.is_admin() then
     return new;
   end if;
-  if auth.uid() is null or new.id <> auth.uid() then
+  -- SQL Editor / service role have no JWT; RLS still blocks anon clients.
+  if auth.uid() is null then
+    return new;
+  end if;
+  if new.id <> auth.uid() then
     raise exception 'Cannot update another profile';
   end if;
   if new.role is distinct from old.role

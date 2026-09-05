@@ -249,7 +249,7 @@ export function AdminPage() {
           Your account is not an admin. After your first sign-in, run this in the Supabase SQL editor
           (replace the id):
           <pre style={{ whiteSpace: 'pre-wrap', marginTop: '0.75rem' }}>
-            {`update public.profiles\nset role = 'admin', tutor_status = 'approved'\nwhere id = '${user.id}';`}
+            {`update public.profiles\nset role = 'admin', tutor_status = 'approved'\nwhere id = '${user.id}';\n-- If that errors, run migration 005 first, or use:\n-- select set_config('app.allow_tutor_apply', 'on', true);\n-- then the update above in the same SQL Editor run.`}
           </pre>
         </div>
       </section>

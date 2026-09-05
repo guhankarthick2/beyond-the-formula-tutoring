@@ -1,5 +1,11 @@
 # Build the Vite app and publish dist/ to GitHub Pages.
 # After the first push: Settings → Pages → Source → GitHub Actions
+#
+# Required repository Actions secrets (or variables) — baked in at build time:
+#   VITE_SUPABASE_URL
+#   VITE_SUPABASE_ANON_KEY
+# Path: Settings → Secrets and variables → Actions → Repository secrets
+# (Environment secrets on "github-pages" alone are NOT visible to the build job.)
 name: Deploy GitHub Pages
 
 on:
@@ -30,11 +36,18 @@ jobs:
       - run: npm ci
 
       - name: Build
-        run: npm run build
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY at build time."
+            echo "Add them under Settings → Secrets and variables → Actions → Repository secrets,"
+            echo "then re-run this workflow. (Vite embeds these during npm run build.)"
+            exit 1
+          fi
+          npm run build
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
 
       # SPA deep links on project Pages fall back through 404.html
       - run: cp dist/index.html dist/404.html
