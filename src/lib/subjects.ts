@@ -26,13 +26,6 @@ export interface Subject {
   recordings: SubjectRecording[]
 }
 
-const YOUTUBE_CHANNEL = 'https://www.youtube.com/@beyondtheformulatutoring'
-
-export function topicRecordingUrl(topicName: string, youtubeUrl?: string | null) {
-  if (youtubeUrl) return youtubeUrl
-  return `${YOUTUBE_CHANNEL}/search?query=${encodeURIComponent(topicName)}`
-}
-
 export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
   test: 'Practice tests',
   video: 'Video lessons',
@@ -49,39 +42,76 @@ export const SUBJECTS: Subject[] = [
       'Functions, trigonometry, polynomials, and AP Precalculus prep — free sessions and open resources.',
     recordings: [
       {
-        slug: 'functions',
-        name: 'Functions',
-        details: 'Function families, transformations, inverses, and composition.',
+        slug: '1-1-to-1-3',
+        name: 'Topics 1.1–1.3',
+        details: 'Change in Tandem; Rates of Change; Rates of Change in Linear and Quadratic Functions.',
+        href: 'https://www.youtube.com/watch?v=Y4476mBsJu0',
       },
       {
-        slug: 'trigonometry',
-        name: 'Trigonometry',
-        details: 'Unit circle, identities, graphs, and solving trig equations.',
+        slug: '1-4-to-1-6',
+        name: 'Topics 1.4–1.6',
+        details: 'Polynomial Functions and Rates of Change; Complex Zeros; End Behavior.',
+        href: 'https://www.youtube.com/watch?v=FjJ6pr_m_ME',
       },
       {
-        slug: 'polynomials',
-        name: 'Polynomials',
-        details: 'Zeros, factoring, end behavior, and rational functions.',
+        slug: '1-7-to-1-10',
+        name: 'Topics 1.7–1.10',
+        details: 'Rational Functions — End Behavior, Zeros, Vertical Asymptotes, and Holes.',
+        href: 'https://www.youtube.com/watch?v=5DJAOTLfJfM',
       },
       {
-        slug: 'exponents-logs',
-        name: 'Exponents & logs',
-        details: 'Exponential growth and decay, log laws, and solving equations.',
+        slug: '1-11-to-1-12',
+        name: 'Topics 1.11–1.12',
+        details: 'Equivalent Representations of Polynomial and Rational Expressions; Transformations of Functions.',
+        href: 'https://www.youtube.com/watch?v=DPWLcTYDgRw',
       },
       {
-        slug: 'sequences-series',
-        name: 'Sequences & series',
-        details: 'Arithmetic and geometric sequences, sigma notation, and series.',
+        slug: '1-13-to-1-14',
+        name: 'Topics 1.13–1.14',
+        details: 'Function Model Selection and Assumption Articulation; Function Model Construction and Application.',
+        href: 'https://www.youtube.com/watch?v=vT0L1y3t-0E',
       },
       {
-        slug: 'conic-sections',
-        name: 'Conic sections',
-        details: 'Circles, ellipses, parabolas, and hyperbolas.',
+        slug: '2-4-to-2-6',
+        name: 'Topics 2.4–2.6',
+        details: 'Exponential Function Manipulation; Context and Data Modeling; Competing Function Model Validation.',
+        href: 'https://www.youtube.com/watch?v=VMFovH6gLGs',
       },
       {
-        slug: 'limits-intro-calculus',
-        name: 'Limits & intro calculus',
-        details: 'Limits, continuity, and a first look at derivatives.',
+        slug: '2-7-to-2-10',
+        name: 'Topics 2.7–2.10',
+        details: 'Composition of Functions; Inverse Functions; Logarithmic Expressions; Inverses of Exponential Functions.',
+        href: 'https://www.youtube.com/watch?v=Q2-ik0aBRck',
+      },
+      {
+        slug: '2-11-to-2-15',
+        name: 'Topics 2.11–2.15',
+        details: 'Logarithmic Functions and Manipulation; Exponential and Logarithmic Equations; Context Modeling; Semi-log Plots.',
+        href: 'https://www.youtube.com/watch?v=rom6F9XBVR4',
+      },
+      {
+        slug: '3-1-to-3-3',
+        name: 'Topics 3.1–3.3',
+        details: 'Periodic Phenomena; Sine, Cosine, and Tangent; Sine and Cosine Function Values.',
+        href: 'https://www.youtube.com/watch?v=dQY3gb-LUsE',
+      },
+      {
+        slug: '3-4-to-3-6',
+        name: 'Topics 3.4–3.6',
+        details: 'Sine and Cosine Function Graphs; Sinusoidal Functions; Sinusoidal Function Transformations.',
+        href: 'https://www.youtube.com/watch?v=GQUFSgOrELs',
+      },
+      {
+        slug: '3-10-to-3-12',
+        name: 'Topics 3.10–3.12',
+        details: 'Trigonometric Equations and Inequalities; Secant, Cosecant, and Cotangent; Equivalent Representations.',
+        href: 'https://www.youtube.com/watch?v=XYlLEoVKx50',
+      },
+      {
+        slug: '3-13-to-3-15',
+        name: 'Topics 3.13–3.15',
+        details: 'Trigonometry and Polar Coordinates; Polar Function Graphs; Rates of Change in Polar Functions.',
+        href: 'https://www.youtube.com/watch?v=RJGWFKdhEFU',
       },
     ],
     resources: [
