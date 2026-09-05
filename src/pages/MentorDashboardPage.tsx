@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { usePageView } from '@/lib/stats'
@@ -145,14 +145,7 @@ export function MentorDashboardPage() {
   }
 
   if (!user) {
-    return (
-      <section className="section">
-        <h1 className="page-title">Mentor dashboard</h1>
-        <p className="lead">
-          <Link to="/auth">Sign in</Link> after your application is approved.
-        </p>
-      </section>
-    )
+    return <Navigate to="/auth" replace />
   }
 
   if (!isApprovedTutor) {

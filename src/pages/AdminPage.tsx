@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
@@ -232,13 +232,7 @@ export function AdminPage() {
   }
 
   if (!user) {
-    return (
-      <section className="section">
-        <p>
-          <Link to="/auth">Sign in</Link> required.
-        </p>
-      </section>
-    )
+    return <Navigate to="/auth" replace />
   }
 
   if (!isAdmin) {

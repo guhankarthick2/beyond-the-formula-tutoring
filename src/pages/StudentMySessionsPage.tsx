@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { PageBack } from '@/components/PageBack'
 import { useAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/hooks'
@@ -85,18 +85,7 @@ export function StudentMySessionsPage() {
   }
 
   if (!user) {
-    return (
-      <section className="section">
-        <PageBack to="/" label="Back to home" />
-        <h1 className="page-title">My sessions</h1>
-        <p className="lead">
-          <Link to="/auth">Sign in</Link> to see your schedule and homework after you enroll in a session.
-        </p>
-        <Link className="btn btn-secondary" to="/students/schedule">
-          Browse sessions
-        </Link>
-      </section>
-    )
+    return <Navigate to="/auth" replace />
   }
 
   const upcoming = bookings.filter((b) => {

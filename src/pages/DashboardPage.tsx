@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { EphemeralChat } from '@/components/EphemeralChat'
 import { useAuth } from '@/lib/auth'
 import { StatusPill } from '@/components/StatusPill'
@@ -148,14 +148,7 @@ export function DashboardPage() {
   }
 
   if (!user) {
-    return (
-      <section className="section">
-        <h1 className="page-title">Dashboard</h1>
-        <p className="lead">
-          <Link to="/auth">Sign in</Link> to manage sessions, requests, and chat.
-        </p>
-      </section>
-    )
+    return <Navigate to="/auth" replace />
   }
 
   return (

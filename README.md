@@ -82,8 +82,8 @@ npm run dev
 3. Run that update in Supabase SQL Editor
 4. Refresh — you can approve tutors, moderate content, and edit topics
 
-If you already ran an older `schema.sql`, also run  
-`supabase/migrations/002_admin_moderation.sql` once for delete/purge tools.
+If you already ran an older `schema.sql`, also run newer files under `supabase/migrations/` as needed  
+(including `005_allow_sql_editor_profile_bootstrap.sql` and `006_fix_slots_bookings_rls_recursion.sql`).
 
 ### 6. Deploy (free)
 

@@ -169,6 +169,53 @@ as $$
   );
 $$;
 
+-- SECURITY DEFINER helpers avoid RLS recursion between slots <-> bookings
+create or replace function public.user_owns_slot(p_slot_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.availability_slots s
+    where s.id = p_slot_id
+      and s.tutor_id = auth.uid()
+  );
+$$;
+
+create or replace function public.user_booked_slot(p_slot_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.bookings b
+    where b.slot_id = p_slot_id
+      and b.student_id = auth.uid()
+  );
+$$;
+
+create or replace function public.tutor_has_roster_student(p_student_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.bookings b
+    join public.availability_slots s on s.id = b.slot_id
+    where b.student_id = p_student_id
+      and s.tutor_id = auth.uid()
+  );
+$$;
+
 -- Updated_at helper
 create or replace function public.set_updated_at()
 returns trigger
@@ -260,10 +307,7 @@ create policy "slots_select_authenticated"
     status = 'open'
     or tutor_id = auth.uid()
     or public.is_admin()
-    or exists (
-      select 1 from public.bookings b
-      where b.slot_id = availability_slots.id and b.student_id = auth.uid()
-    )
+    or public.user_booked_slot(id)
   );
 
 create policy "slots_insert_tutor"
@@ -281,10 +325,7 @@ create policy "bookings_select_participants"
   using (
     student_id = auth.uid()
     or public.is_admin()
-    or exists (
-      select 1 from public.availability_slots s
-      where s.id = bookings.slot_id and s.tutor_id = auth.uid()
-    )
+    or public.user_owns_slot(slot_id)
   );
 
 create policy "bookings_insert_student"

@@ -1,8 +1,14 @@
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, signOut, isApprovedTutor, isAdmin } = useAuth()
+  const navigate = useNavigate()
+
+  async function onSignOut() {
+    await signOut()
+    navigate('/', { replace: true })
+  }
 
   return (
     <>
@@ -58,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {profile?.display_name ?? 'Signed in'}
                   {isApprovedTutor ? ' · mentor' : ''}
                 </span>
-                <button type="button" className="btn btn-secondary" onClick={() => void signOut()}>
+                <button type="button" className="btn btn-secondary" onClick={() => void onSignOut()}>
                   Sign out
                 </button>
               </>
