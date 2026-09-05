@@ -4,7 +4,7 @@ export function PrivacyPolicyPage() {
   return (
     <article className="section legal">
       <h1 className="page-title">Privacy Policy</h1>
-      <p className="lead">Beyond The Formula Tutoring (“we,” “us,” or “our”)</p>
+      <p className="lead">Beyond The Formula (“we,” “us,” or “our”)</p>
       <p className="muted">Effective date: {EFFECTIVE}</p>
 
       <p>

@@ -44,9 +44,14 @@ Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, sessi
 - **JWT expiry**: `14400` seconds (**4 hours**) — short-lived access token
 - **Refresh / session inactivity**: about **7 days** — silent refresh keeps users signed in while they work; after ~a week idle they sign in again
 
-The app client uses Supabase defaults: `autoRefreshToken`, `persistSession`, `detectSessionInUrl`, and PKCE. Do **not** put the **service role** key in the frontend or GitHub Pages secrets.
-
-### 3. Configure the app
+#### Google OAuth branding verification tips
+- Keep the OAuth **App name** exactly **Beyond The Formula** (same as the home page H1).
+- After deploy, confirm these load **without signing in**:
+  - Home: `https://guhankarthick2.github.io/beyond-the-formula-tutoring/`
+  - Privacy: `https://guhankarthick2.github.io/beyond-the-formula-tutoring/privacy/`
+  - Terms: `https://guhankarthick2.github.io/beyond-the-formula-tutoring/terms/`
+- **Ownership:** verify `github.io` (or your custom domain) in [Google Search Console](https://search.google.com/search-console). Use the HTML tag method: paste the `google-site-verification` meta into `index.html` (there is a commented placeholder), commit, deploy, then click Verify.
+- Pages source must stay **GitHub Actions** (not “Deploy from a branch”), or the site goes blank again.
 
 ```bash
 cp .env.example .env

@@ -6,7 +6,7 @@ export function TermsOfServicePage() {
   return (
     <article className="section legal">
       <h1 className="page-title">Terms of Service</h1>
-      <p className="lead">Beyond The Formula Tutoring (“we,” “us,” or “our”)</p>
+      <p className="lead">Beyond The Formula (“we,” “us,” or “our”)</p>
       <p className="muted">Effective date: {EFFECTIVE}</p>
 
       <p>

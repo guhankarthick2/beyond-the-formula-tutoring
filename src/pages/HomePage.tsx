@@ -31,13 +31,14 @@ export function HomePage() {
           <span className="badge badge-blue">Nonprofit</span>
           <span className="badge badge-amber">Math & STEM</span>
         </div>
-        <h1 id="hero-heading">
-          Beyond The Formula
-        </h1>
+        <h1 id="hero-heading">Beyond The Formula</h1>
         <p className="hero-tagline">Math is beyond the formula.</p>
         <p>
-          Free nonprofit tutoring that builds confidence — live sessions with mentors,
-          open resources, practice tests, and a community where every student belongs.
+          <strong>Beyond The Formula</strong> is a free nonprofit tutoring app for math and STEM.
+          Our purpose is to help students build real understanding through live sessions with
+          volunteer mentors, open resources, practice tests, recordings, and a supportive community —
+          not just memorizing formulas. Anyone can browse the student hub and free resources without
+          signing in. Sign-in is optional and only needed to enroll in sessions or mentor.
         </p>
         <div className="btn-group">
           <Link className="btn btn-primary" to="/students">
