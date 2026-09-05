@@ -53,10 +53,13 @@ If you already ran an older `schema.sql`, also run
 
 ### 5. Deploy (free)
 
-- Build: `npm run build`
-- Publish the `dist/` folder to [Cloudflare Pages](https://pages.cloudflare.com) or Netlify
-- Add the same `VITE_*` env vars in the host dashboard
-- Add the production URL to Supabase Auth redirect URLs
+**GitHub Pages (this repo):** pushes to `main` run `.github/workflows/deploy.yml`, which builds Vite and publishes `dist/`.
+
+1. Repo **Settings → Pages → Build and deployment → Source: GitHub Actions** (required once; branch/`/` serving of source will stay blank)
+2. Optional: add repository secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` so Auth/API work in production
+3. Add `https://guhankarthick2.github.io/beyond-the-formula-tutoring` to Supabase Auth redirect URLs
+
+**Other hosts:** `npm run build`, then publish `dist/` to [Cloudflare Pages](https://pages.cloudflare.com) or Netlify (set the same `VITE_*` env vars). For a root domain, leave Vite `base` as `/` (do not set `GITHUB_REPOSITORY` / `VITE_BASE_PATH`).
 
 ## Features
 

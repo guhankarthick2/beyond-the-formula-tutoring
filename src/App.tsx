@@ -21,7 +21,7 @@ export default function App() {
   return (
     <AuthProvider>
       <SubjectProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
           <Layout>
             <Routes>
               <Route path="/" element={<HomePage />} />
