@@ -34,10 +34,12 @@ Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, sessi
 
 #### URL configuration
 **Authentication → URL configuration**
-- **Site URL** (production): `https://guhankarthick2.github.io/beyond-the-formula-tutoring/`
-- **Redirect URLs** allow list:
+- **Site URL** (production): `https://guhankarthick2.github.io/beyond-the-formula-tutoring`
+- **Redirect URLs** allow list (one per line):
   - `http://localhost:3001/**`
   - `https://guhankarthick2.github.io/beyond-the-formula-tutoring/**`
+
+Keep **Site URL** on the Pages URL (not localhost). Localhost belongs only in the redirect allow list for local dev.
 
 #### Session / JWT (token refresh without constant re-login)
 **Authentication → Sessions** (or JWT settings, depending on dashboard version):

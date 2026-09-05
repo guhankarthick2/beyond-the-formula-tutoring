@@ -25,6 +25,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # So secrets/vars on the github-pages Environment are visible during Vite build.
+    # Repository secrets also work. Prefer identical names in either place.
+    environment: github-pages
     steps:
       - uses: actions/checkout@v4
 
@@ -35,15 +38,24 @@ jobs:
 
       - run: npm ci
 
-      - name: Build
+      - name: Verify Supabase env for Vite
         run: |
+          echo "VITE_SUPABASE_URL length: ${#VITE_SUPABASE_URL}"
+          echo "VITE_SUPABASE_ANON_KEY length: ${#VITE_SUPABASE_ANON_KEY}"
           if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
             echo "::error::Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY at build time."
-            echo "Add them under Settings → Secrets and variables → Actions → Repository secrets,"
-            echo "then re-run this workflow. (Vite embeds these during npm run build.)"
+            echo "Add BOTH under either:"
+            echo "  Settings → Secrets and variables → Actions → Repository secrets"
+            echo "  OR Environment secrets for environment: github-pages"
+            echo "Exact names required: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY"
             exit 1
           fi
-          npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Build
+        run: npm run build
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
