@@ -12,8 +12,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <header className="site-header">
         <div className="header-inner">
           <Link to="/" className="brand">
-            <p className="brand-name">Beyond The Formula</p>
-            <p className="brand-tag">Math is beyond the formula · free nonprofit tutoring</p>
+            <img
+              className="brand-mark"
+              src={`${import.meta.env.BASE_URL}logo.png`}
+              alt=""
+              width={44}
+              height={44}
+            />
+            <span className="brand-text">
+              <p className="brand-name">Beyond The Formula</p>
+              <p className="brand-tag">Math is beyond the formula · free nonprofit tutoring</p>
+            </span>
           </Link>
           <nav className="nav" aria-label="Primary">
             <NavLink className="btn btn-ghost" to="/" end>
@@ -66,6 +75,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </main>
       <footer className="site-footer">
         <p>Beyond The Formula — free nonprofit math & STEM tutoring</p>
+        <p className="footer-links">
+          <Link to="/privacy">Privacy Policy</Link>
+          <span aria-hidden="true"> · </span>
+          <Link to="/terms">Terms of Service</Link>
+        </p>
         <p className="muted footer-note">
           Display names only. No personal contact details on public pages.
         </p>

@@ -8,6 +8,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { HomePage } from '@/pages/HomePage'
 import { MentorDashboardPage } from '@/pages/MentorDashboardPage'
 import { MentorHomePage } from '@/pages/MentorHomePage'
+import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { RequestPage } from '@/pages/RequestPage'
 import { ResourcesPage } from '@/pages/ResourcesPage'
 import { ScheduleRedirect, SessionsPage } from '@/pages/SessionsPage'
@@ -15,6 +16,7 @@ import { StuckDetailPage, StuckListPage } from '@/pages/StuckPage'
 import { RecordingsPage } from '@/pages/RecordingsPage'
 import { StudentHubPage, StudentSubjectPage } from '@/pages/StudentHubPage'
 import { StudentMySessionsPage } from '@/pages/StudentMySessionsPage'
+import { TermsOfServicePage } from '@/pages/TermsOfServicePage'
 import { Unit1TestPage } from '@/pages/Unit1TestPage'
 
 export default function App() {
@@ -38,6 +40,8 @@ export default function App() {
               <Route path="/mentors" element={<MentorHomePage />} />
               <Route path="/mentors/dashboard" element={<MentorDashboardPage />} />
               <Route path="/auth" element={<AuthPage />} />
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsOfServicePage />} />
               <Route path="/volunteer" element={<Navigate to="/mentors" replace />} />
               <Route path="/sessions" element={<ScheduleRedirect />} />
               <Route path="/request" element={<RequestPage />} />
