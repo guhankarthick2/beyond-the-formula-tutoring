@@ -173,3 +173,17 @@ export function resourcesByKind(subject: Subject): Record<ResourceKind, SubjectR
   }
   return grouped
 }
+
+export type CatalogRecording = SubjectRecording & { subjectSlug: string; subjectName: string }
+
+/** Flat list of subject recordings that have a video URL (for session attribution). */
+export function catalogRecordings(): CatalogRecording[] {
+  const out: CatalogRecording[] = []
+  for (const s of SUBJECTS) {
+    for (const r of s.recordings) {
+      if (!r.href) continue
+      out.push({ ...r, subjectSlug: s.slug, subjectName: s.name })
+    }
+  }
+  return out
+}

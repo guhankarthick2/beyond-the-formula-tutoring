@@ -314,6 +314,10 @@ create policy "slots_insert_tutor"
   on public.availability_slots for insert to authenticated
   with check (tutor_id = auth.uid() and public.is_approved_tutor());
 
+create policy "slots_insert_admin"
+  on public.availability_slots for insert to authenticated
+  with check (public.is_admin());
+
 create policy "slots_update_tutor_or_admin"
   on public.availability_slots for update to authenticated
   using (tutor_id = auth.uid() or public.is_admin())
@@ -554,6 +558,39 @@ $$;
 
 grant execute on function public.admin_set_tutor_status(uuid, public.tutor_status) to authenticated;
 
+create or replace function public.admin_set_role(
+  p_user_id uuid,
+  p_role public.user_role
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin only';
+  end if;
+
+  if not exists (select 1 from public.profiles where id = p_user_id) then
+    raise exception 'User not found';
+  end if;
+
+  -- Prevent locking yourself out of the admin console.
+  if p_user_id = auth.uid() and p_role is distinct from 'admin'::public.user_role then
+    raise exception 'Cannot remove your own admin role';
+  end if;
+
+  perform set_config('app.allow_tutor_apply', 'on', true);
+
+  update public.profiles
+  set role = p_role
+  where id = p_user_id;
+end;
+$$;
+
+grant execute on function public.admin_set_role(uuid, public.user_role) to authenticated;
+
 -- Atomic book slot
 create or replace function public.book_slot(p_slot_id uuid)
 returns uuid
@@ -683,5 +720,6 @@ insert into public.topics (name, slug, sort_order, youtube_url) values
   ('Conic sections', 'conic-sections', 60, null),
   ('Limits & intro calculus', 'limits-intro-calculus', 70, null);
 
--- After first signup, promote yourself to admin (replace YOUR_USER_ID):
--- update public.profiles set role = 'admin', tutor_status = 'approved' where id = 'YOUR_USER_ID';
+-- After first signup, promote yourself to admin (replace YOUR_USER_ID).
+-- Mentoring stays optional; enable from Admin → Tutor apps when desired.
+-- update public.profiles set role = 'admin' where id = 'YOUR_USER_ID';

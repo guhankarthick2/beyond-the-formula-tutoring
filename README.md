@@ -136,12 +136,16 @@ Typical early usage stays on free tiers:
 - GitHub Pages / Cloudflare Pages / Netlify: $0
 - Supabase free tier: $0 until you outgrow limits
 
-## Promote yourself to admin (manual)
+## Promote yourself to admin (manual, first admin only)
+
+The **first** admin still needs a one-time SQL promote. After that, use **Admin → Admins** in the app to search users and grant admin access. Also run migration `009_admin_set_role.sql` so in-app promotion works.
+
+Admin and mentor are separate. Promoting to admin does **not** make you a tutor. Enable mentoring later from **Admin → Tutor apps** if you want the mentor dashboard.
 
 ```sql
 -- Run migration 005 once (or the function body in supabase/migrations/005_*.sql), then:
 update public.profiles
-set role = 'admin', tutor_status = 'approved'
+set role = 'admin'
 where id = 'YOUR_USER_UUID';
 ```
 
@@ -151,6 +155,6 @@ Or in one SQL Editor batch without the migration:
 select set_config('app.allow_tutor_apply', 'on', true);
 
 update public.profiles
-set role = 'admin', tutor_status = 'approved'
+set role = 'admin'
 where id = 'YOUR_USER_UUID';
 ```

@@ -26,7 +26,7 @@ export function MentorHomePage() {
       return
     }
     await refreshProfile()
-    setMessage('Interest form submitted! Guhan will review your application before you can access the mentor dashboard.')
+    setMessage('Interest form submitted! An admin will review your application before you can access the mentor dashboard.')
   }
 
   return (
@@ -58,7 +58,7 @@ export function MentorHomePage() {
             <li>Watch the introduction video</li>
             <li>Accept mentor expectations</li>
             <li>Submit the interest form</li>
-            <li>Guhan reviews and approves</li>
+            <li>Admin reviews and approves</li>
             <li>Access the mentor dashboard</li>
           </ol>
         </article>
@@ -118,7 +118,7 @@ export function MentorHomePage() {
             )}
             {user && profile?.tutor_status === 'pending' && (
               <div className="alert alert-warn">
-                Your application is pending review. Guhan will approve you soon.
+                Your application is pending review. An admin will approve you soon.
               </div>
             )}
             {user && profile?.tutor_status === 'rejected' && (

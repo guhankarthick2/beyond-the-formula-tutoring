@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
+import { catalogRecordings } from '@/lib/subjects'
 import { supabase } from '@/lib/supabase'
 import type { Profile, SessionRequest, StuckQuestion, Topic, TutorStatus } from '@/lib/types'
 
-type Tab = 'tutors' | 'signups' | 'requests' | 'stuck' | 'cleanup' | 'topics'
+type Tab = 'tutors' | 'signups' | 'admins' | 'sessions' | 'requests' | 'stuck' | 'cleanup' | 'topics'
 
 export function AdminPage() {
-  const { isAdmin, user } = useAuth()
+  const { isAdmin, user, profile, isApprovedTutor, refreshProfile } = useAuth()
   const { topics, loading: topicsLoading } = useTopics()
+  const recordings = useMemo(() => catalogRecordings(), [])
   const [tab, setTab] = useState<Tab>('tutors')
   const [pending, setPending] = useState<Profile[]>([])
   const [tutors, setTutors] = useState<Profile[]>([])
@@ -29,6 +31,20 @@ export function AdminPage() {
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
+  const [mentorQuery, setMentorQuery] = useState('')
+  const [selectedMentorId, setSelectedMentorId] = useState('')
+  const [attrDate, setAttrDate] = useState('')
+  const [attrTopicId, setAttrTopicId] = useState('')
+  const [attrAnyTopic, setAttrAnyTopic] = useState(true)
+  const [attrTimeNote, setAttrTimeNote] = useState('')
+  const [attrRecordingKey, setAttrRecordingKey] = useState('')
+  const [attrUrl, setAttrUrl] = useState('')
+
+  const [adminSearch, setAdminSearch] = useState('')
+  const [adminHits, setAdminHits] = useState<Profile[]>([])
+  const [adminList, setAdminList] = useState<Profile[]>([])
+  const [adminSearching, setAdminSearching] = useState(false)
+
   const load = useCallback(async () => {
     if (!isAdmin) return
     setError(null)
@@ -37,6 +53,7 @@ export function AdminPage() {
       { data: pendingRows, error: pErr },
       { data: tutorRows, error: tuErr },
       { data: signupRows, error: sErr },
+      { data: adminRows, error: aErr },
       { data: reqRows, error: rErr },
       { data: stuckRows, error: stErr },
       { data: topicRows, error: topErr },
@@ -48,6 +65,7 @@ export function AdminPage() {
         .eq('tutor_status', 'approved')
         .order('display_name'),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(75),
+      supabase.from('profiles').select('*').eq('role', 'admin').order('display_name'),
       supabase
         .from('session_requests')
         .select(
@@ -64,12 +82,19 @@ export function AdminPage() {
     ])
 
     const firstErr =
-      pErr?.message || tuErr?.message || sErr?.message || rErr?.message || stErr?.message || topErr?.message
+      pErr?.message ||
+      tuErr?.message ||
+      sErr?.message ||
+      aErr?.message ||
+      rErr?.message ||
+      stErr?.message ||
+      topErr?.message
     if (firstErr) setError(firstErr)
 
     setPending((pendingRows as Profile[]) ?? [])
     setTutors((tutorRows as Profile[]) ?? [])
     setSignups((signupRows as Profile[]) ?? [])
+    setAdminList((adminRows as Profile[]) ?? [])
     setRequests((reqRows as SessionRequest[]) ?? [])
     setStuck((stuckRows as StuckQuestion[]) ?? [])
     setAllTopics((topicRows as Topic[]) ?? [])
@@ -91,8 +116,15 @@ export function AdminPage() {
     })
     if (err) setError(err.message)
     else {
-      flash(`Tutor status set to ${tutor_status}.`)
+      flash(
+        tutor_status === 'approved'
+          ? 'Mentoring enabled.'
+          : tutor_status === 'none'
+            ? 'Mentoring disabled (admin role unchanged).'
+            : `Tutor status set to ${tutor_status}.`,
+      )
       await load()
+      if (id === user?.id) await refreshProfile()
     }
   }
 
@@ -110,6 +142,59 @@ export function AdminPage() {
       flash('Display name updated.')
       await load()
     }
+  }
+
+  async function searchUsersForAdmin(e?: React.FormEvent) {
+    e?.preventDefault()
+    const q = adminSearch.trim()
+    if (q.length < 2) {
+      setError('Type at least 2 characters to search by display name.')
+      return
+    }
+    setAdminSearching(true)
+    setError(null)
+    const { data, error: err } = await supabase
+      .from('profiles')
+      .select('*')
+      .ilike('display_name', `%${q}%`)
+      .order('display_name')
+      .limit(25)
+    setAdminSearching(false)
+    if (err) setError(err.message)
+    else setAdminHits((data as Profile[]) ?? [])
+  }
+
+  async function refreshAdminHits() {
+    const q = adminSearch.trim()
+    if (q.length < 2) return
+    const { data, error: err } = await supabase
+      .from('profiles')
+      .select('*')
+      .ilike('display_name', `%${q}%`)
+      .order('display_name')
+      .limit(25)
+    if (err) setError(err.message)
+    else setAdminHits((data as Profile[]) ?? [])
+  }
+
+  async function setUserRole(id: string, role: 'admin' | 'student' | 'tutor') {
+    const { error: err } = await supabase.rpc('admin_set_role', {
+      p_user_id: id,
+      p_role: role,
+    })
+    if (err) setError(err.message)
+    else {
+      flash(role === 'admin' ? 'User promoted to admin.' : 'Admin role removed.')
+      await load()
+      await refreshAdminHits()
+    }
+  }
+
+  function demoteAdmin(p: Profile) {
+    if (p.id === user?.id) return
+    if (!confirm(`Remove admin access for ${p.display_name}?`)) return
+    const nextRole = p.tutor_status === 'approved' ? 'tutor' : 'student'
+    void setUserRole(p.id, nextRole)
   }
 
   async function cancelRequest(id: string) {
@@ -231,6 +316,46 @@ export function AdminPage() {
     }
   }
 
+  const mentorMatches = useMemo(() => {
+    const q = mentorQuery.trim().toLowerCase()
+    if (!q) return tutors.slice(0, 8)
+    return tutors.filter((t) => t.display_name.toLowerCase().includes(q)).slice(0, 8)
+  }, [mentorQuery, tutors])
+
+  const selectedMentor = tutors.find((t) => t.id === selectedMentorId)
+
+  function pickRecording(key: string) {
+    setAttrRecordingKey(key)
+    if (!key) return
+    const rec = recordings.find((r) => `${r.subjectSlug}:${r.slug}` === key)
+    if (!rec) return
+    setAttrUrl(rec.href ?? '')
+    setAttrTimeNote(rec.name)
+  }
+
+  async function attributeSession(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedMentorId || !attrDate) return
+    const { error: err } = await supabase.from('availability_slots').insert({
+      tutor_id: selectedMentorId,
+      topic_id: attrAnyTopic ? null : attrTopicId || null,
+      session_date: attrDate,
+      time_note: attrTimeNote.trim(),
+      meeting_url: attrUrl.trim(),
+      status: 'booked',
+    })
+    if (err) setError(err.message)
+    else {
+      flash(`Session attributed to ${selectedMentor?.display_name ?? 'mentor'}.`)
+      setAttrDate('')
+      setAttrTimeNote('')
+      setAttrUrl('')
+      setAttrRecordingKey('')
+      setAttrTopicId('')
+      setAttrAnyTopic(true)
+    }
+  }
+
   if (!user) {
     return <Navigate to="/auth" replace />
   }
@@ -241,9 +366,10 @@ export function AdminPage() {
         <h1 className="page-title">Admin</h1>
         <div className="alert alert-warn">
           Your account is not an admin. After your first sign-in, run this in the Supabase SQL editor
-          (replace the id):
+          (replace the id). Admin alone does not make you a mentor — enable mentoring from Admin → Tutor
+          apps when you want that:
           <pre style={{ whiteSpace: 'pre-wrap', marginTop: '0.75rem' }}>
-            {`update public.profiles\nset role = 'admin', tutor_status = 'approved'\nwhere id = '${user.id}';\n-- If that errors, run migration 005 first, or use:\n-- select set_config('app.allow_tutor_apply', 'on', true);\n-- then the update above in the same SQL Editor run.`}
+            {`update public.profiles\nset role = 'admin'\nwhere id = '${user.id}';\n-- If that errors, run migration 005 first, or use:\n-- select set_config('app.allow_tutor_apply', 'on', true);\n-- then the update above in the same SQL Editor run.`}
           </pre>
         </div>
       </section>
@@ -253,6 +379,8 @@ export function AdminPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'tutors', label: 'Tutor apps' },
     { id: 'signups', label: 'Sign-ups' },
+    { id: 'admins', label: 'Admins' },
+    { id: 'sessions', label: 'Sessions' },
     { id: 'requests', label: 'Requests' },
     { id: 'stuck', label: 'Stuck points' },
     { id: 'cleanup', label: 'Cleanup' },
@@ -263,8 +391,9 @@ export function AdminPage() {
     <section className="section">
       <h1 className="page-title">Admin</h1>
       <p className="lead">
-        Approve volunteers, moderate sign-ups and requests, and clear old stuck points or session
-        data. In-app chat is never stored.
+        Approve volunteers, attribute completed sessions to mentors, moderate sign-ups and requests, and
+        clear old stuck points or session data. Admin does not imply mentoring — enable that for yourself
+        under Tutor apps if you want it. In-app chat is never stored.
       </p>
 
       <div className="nav" style={{ marginBottom: '1rem' }} role="tablist" aria-label="Admin sections">
@@ -287,6 +416,44 @@ export function AdminPage() {
 
       {tab === 'tutors' && (
         <div className="stack">
+          {profile?.role === 'admin' && (
+            <div className="card stack">
+              <h2 style={{ margin: 0 }}>Your mentoring</h2>
+              <p className="muted" style={{ margin: 0 }}>
+                Admin and mentor are separate. You can moderate the site without tutoring, or enable
+                mentoring for yourself anytime.
+              </p>
+              {isApprovedTutor ? (
+                <>
+                  <p style={{ margin: 0 }}>
+                    Mentoring is <strong>on</strong> for your account.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => void setTutorStatus(user!.id, 'none')}
+                  >
+                    Disable mentoring for me
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: 0 }}>
+                    Mentoring is <strong>off</strong> — you will not appear as a tutor or get the mentor
+                    dashboard until you enable it.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void setTutorStatus(user!.id, 'approved')}
+                  >
+                    Enable mentoring for me
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="card stack">
             <h2 style={{ margin: 0 }}>Pending tutor applications</h2>
             {pending.length === 0 ? (
@@ -336,13 +503,129 @@ export function AdminPage() {
                   >
                     <strong>{p.display_name}</strong>
                     <span className="pill">{p.role}</span>
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      onClick={() => void setTutorStatus(p.id, 'rejected')}
-                    >
-                      Revoke tutoring
-                    </button>
+                    {p.role === 'admin' && p.id !== user?.id ? (
+                      <span className="muted">Admin mentor (manage their own mentoring)</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() =>
+                          void setTutorStatus(p.id, p.role === 'admin' ? 'none' : 'rejected')
+                        }
+                      >
+                        {p.role === 'admin' ? 'Disable mentoring' : 'Revoke tutoring'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'admins' && (
+        <div className="stack">
+          <div className="card stack">
+            <h2 style={{ margin: 0 }}>Promote an admin</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Search by display name, then grant admin access. Mentoring stays separate — new admins
+              are not mentors unless already approved as tutors.
+            </p>
+            <form className="form" onSubmit={(e) => void searchUsersForAdmin(e)}>
+              <label>
+                Display name
+                <input
+                  type="search"
+                  autoComplete="off"
+                  value={adminSearch}
+                  onChange={(e) => setAdminSearch(e.target.value)}
+                  placeholder="Type at least 2 characters…"
+                  minLength={2}
+                  required
+                />
+              </label>
+              <button className="btn btn-primary" type="submit" disabled={adminSearching}>
+                {adminSearching ? 'Searching…' : 'Search'}
+              </button>
+            </form>
+            {adminHits.length > 0 && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Display name</th>
+                      <th>Role</th>
+                      <th>Tutor status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminHits.map((p) => (
+                      <tr key={p.id}>
+                        <td>
+                          {p.display_name}
+                          {p.id === user?.id ? ' (you)' : ''}
+                        </td>
+                        <td>{p.role}</td>
+                        <td>
+                          <StatusPill status={p.tutor_status} />
+                        </td>
+                        <td>
+                          {p.role === 'admin' ? (
+                            <span className="muted">Already admin</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={() => {
+                                if (
+                                  !confirm(
+                                    `Make ${p.display_name} an admin? They will get full moderation access.`,
+                                  )
+                                ) {
+                                  return
+                                }
+                                void setUserRole(p.id, 'admin')
+                              }}
+                            >
+                              Make admin
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card stack">
+            <h2 style={{ margin: 0 }}>Current admins</h2>
+            {adminList.length === 0 ? (
+              <div className="empty">No admins found.</div>
+            ) : (
+              <div className="stack">
+                {adminList.map((p) => (
+                  <div
+                    key={p.id}
+                    style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}
+                  >
+                    <strong>{p.display_name}</strong>
+                    {p.id === user?.id && <span className="pill">you</span>}
+                    <StatusPill status={p.tutor_status} />
+                    {p.id === user?.id ? (
+                      <span className="muted">You cannot remove your own admin role</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => demoteAdmin(p)}
+                      >
+                        Remove admin
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -416,7 +699,27 @@ export function AdminPage() {
                             Revoke
                           </button>
                         )}
-                        {p.tutor_status === 'rejected' && (
+                        {p.role === 'admin' && p.id === user?.id && p.tutor_status === 'approved' && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void setTutorStatus(p.id, 'none')}
+                          >
+                            Disable mentoring
+                          </button>
+                        )}
+                        {p.role === 'admin' &&
+                          p.id === user?.id &&
+                          p.tutor_status !== 'approved' && (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={() => void setTutorStatus(p.id, 'approved')}
+                            >
+                              Enable mentoring
+                            </button>
+                          )}
+                        {p.tutor_status === 'rejected' && p.role !== 'admin' && (
                           <button
                             type="button"
                             className="btn btn-secondary"
@@ -456,6 +759,130 @@ export function AdminPage() {
               </div>
             </form>
           )}
+        </div>
+      )}
+
+      {tab === 'sessions' && (
+        <div className="card stack">
+          <h2 style={{ margin: 0 }}>Attribute a completed session</h2>
+          <p className="muted" style={{ margin: 0 }}>
+            Assign a past session (and optional recording link) to any approved mentor. Mentors can also
+            claim their own recordings from the mentor dashboard.
+          </p>
+          <form className="form" onSubmit={(e) => void attributeSession(e)}>
+            <label>
+              Mentor
+              <input
+                type="search"
+                autoComplete="off"
+                placeholder="Type a display name…"
+                value={selectedMentor ? selectedMentor.display_name : mentorQuery}
+                onChange={(e) => {
+                  setSelectedMentorId('')
+                  setMentorQuery(e.target.value)
+                }}
+              />
+            </label>
+            {!selectedMentorId && mentorQuery.trim() && (
+              <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {mentorMatches.length === 0 ? (
+                  <li className="muted">No matching approved mentors.</li>
+                ) : (
+                  mentorMatches.map((t) => (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          setSelectedMentorId(t.id)
+                          setMentorQuery(t.display_name)
+                        }}
+                      >
+                        {t.display_name}
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+            {selectedMentorId && (
+              <p className="muted" style={{ margin: 0 }}>
+                Selected: <strong>{selectedMentor?.display_name}</strong>{' '}
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setSelectedMentorId('')
+                    setMentorQuery('')
+                  }}
+                >
+                  Clear
+                </button>
+              </p>
+            )}
+            <label>
+              Session date
+              <input
+                required
+                type="date"
+                value={attrDate}
+                onChange={(e) => setAttrDate(e.target.value)}
+              />
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={attrAnyTopic}
+                onChange={(e) => setAttrAnyTopic(e.target.checked)}
+              />
+              <span>Any curated topic</span>
+            </label>
+            {!attrAnyTopic && (
+              <label>
+                Topic
+                <select required value={attrTopicId} onChange={(e) => setAttrTopicId(e.target.value)}>
+                  <option value="">Select</option>
+                  {(allTopics.length ? allTopics : topics).filter((t) => t.active).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label>
+              Catalog recording (optional)
+              <select value={attrRecordingKey} onChange={(e) => pickRecording(e.target.value)}>
+                <option value="">Paste a URL below, or pick one…</option>
+                {recordings.map((r) => (
+                  <option key={`${r.subjectSlug}:${r.slug}`} value={`${r.subjectSlug}:${r.slug}`}>
+                    {r.subjectName}: {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Label / time note
+              <input
+                value={attrTimeNote}
+                onChange={(e) => setAttrTimeNote(e.target.value)}
+                maxLength={120}
+                placeholder="e.g. Topics 1.1–1.3"
+              />
+            </label>
+            <label>
+              Recording or meeting URL
+              <input
+                value={attrUrl}
+                onChange={(e) => setAttrUrl(e.target.value)}
+                maxLength={500}
+                placeholder="https://…"
+              />
+            </label>
+            <button className="btn btn-primary" type="submit" disabled={!selectedMentorId}>
+              Attribute session
+            </button>
+          </form>
         </div>
       )}
 

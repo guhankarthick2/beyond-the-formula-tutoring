@@ -1,26 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { usePageView } from '@/lib/stats'
+import { catalogRecordings } from '@/lib/subjects'
 import { supabase } from '@/lib/supabase'
 import type { AvailabilitySlot, RosterStudent } from '@/lib/types'
 import { StatusPill } from '@/components/StatusPill'
+
+type SessionMode = 'upcoming' | 'past'
 
 export function MentorDashboardPage() {
   usePageView('/mentors/dashboard')
   const { user, profile, isApprovedTutor } = useAuth()
   const { topics } = useTopics()
+  const recordings = useMemo(() => catalogRecordings(), [])
   const [mySlots, setMySlots] = useState<AvailabilitySlot[]>([])
   const [roster, setRoster] = useState<RosterStudent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
 
+  const [sessionMode, setSessionMode] = useState<SessionMode>('upcoming')
   const [sessionDate, setSessionDate] = useState('')
   const [topicId, setTopicId] = useState('')
   const [anyTopic, setAnyTopic] = useState(false)
   const [timeNote, setTimeNote] = useState('')
   const [meetingUrl, setMeetingUrl] = useState('')
+  const [recordingKey, setRecordingKey] = useState('')
+
+  const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({})
 
   const [msgStudentId, setMsgStudentId] = useState('')
   const [msgBody, setMsgBody] = useState('')
@@ -29,6 +37,8 @@ export function MentorDashboardPage() {
   const [hwTitle, setHwTitle] = useState('')
   const [hwBody, setHwBody] = useState('')
   const [hwDue, setHwDue] = useState('')
+
+  const today = new Date().toISOString().slice(0, 10)
 
   const load = useCallback(async () => {
     if (!user || !isApprovedTutor) return
@@ -47,6 +57,7 @@ export function MentorDashboardPage() {
 
     const slots = (slotsRes.data as AvailabilitySlot[]) ?? []
     setMySlots(slots)
+    setLinkDrafts(Object.fromEntries(slots.map((s) => [s.id, s.meeting_url ?? ''])))
 
     const slotIds = slots.map((s) => s.id)
     if (slotIds.length === 0) {
@@ -88,22 +99,65 @@ export function MentorDashboardPage() {
     void load()
   }, [load])
 
+  function pickRecording(key: string) {
+    setRecordingKey(key)
+    if (!key) return
+    const rec = recordings.find((r) => `${r.subjectSlug}:${r.slug}` === key)
+    if (!rec) return
+    setMeetingUrl(rec.href ?? '')
+    setTimeNote(rec.name)
+  }
+
   async function addSession(e: React.FormEvent) {
     e.preventDefault()
     if (!user) return
+    const isPast = sessionMode === 'past'
     const { error: err } = await supabase.from('availability_slots').insert({
       tutor_id: user.id,
       topic_id: anyTopic ? null : topicId,
       session_date: sessionDate,
       time_note: timeNote.trim(),
       meeting_url: meetingUrl.trim(),
-      status: 'open',
+      status: isPast ? 'booked' : 'open',
     })
     if (err) setError(err.message)
     else {
-      setOk('Session published to the public schedule.')
+      setOk(
+        isPast
+          ? 'Past session saved — it counts toward your tutoring history.'
+          : 'Session published to the public schedule.',
+      )
       setTimeNote('')
       setMeetingUrl('')
+      setRecordingKey('')
+      setSessionDate('')
+      await load()
+    }
+  }
+
+  async function saveSessionLink(slotId: string) {
+    const url = (linkDrafts[slotId] ?? '').trim()
+    const { error: err } = await supabase
+      .from('availability_slots')
+      .update({ meeting_url: url })
+      .eq('id', slotId)
+      .eq('tutor_id', user!.id)
+    if (err) setError(err.message)
+    else {
+      setOk('Link updated.')
+      await load()
+    }
+  }
+
+  async function markBooked(slotId: string) {
+    const { error: err } = await supabase
+      .from('availability_slots')
+      .update({ status: 'booked' })
+      .eq('id', slotId)
+      .eq('tutor_id', user!.id)
+    if (err) setError(err.message)
+    else {
+      setOk('Session marked as completed.')
       await load()
     }
   }
@@ -154,7 +208,7 @@ export function MentorDashboardPage() {
         <h1 className="page-title">Mentor dashboard</h1>
         <div className="callout callout-warn">
           {profile?.tutor_status === 'pending' ? (
-            <>Your interest form is pending review. Guhan will approve you soon.</>
+            <>Your interest form is pending review. An admin will approve you soon.</>
           ) : (
             <>
               Submit the <Link to="/mentors">mentor interest form</Link> first.
@@ -165,9 +219,7 @@ export function MentorDashboardPage() {
     )
   }
 
-  const uniqueStudents = Array.from(
-    new Map(roster.map((r) => [r.id, r])).values(),
-  )
+  const uniqueStudents = Array.from(new Map(roster.map((r) => [r.id, r])).values())
 
   const bookedSlots = mySlots.filter((s) => s.status === 'booked' || s.status === 'open')
 
@@ -179,7 +231,8 @@ export function MentorDashboardPage() {
         </div>
         <h1 className="page-title">Mentor dashboard</h1>
         <p className="lead" style={{ margin: 0 }}>
-          Hello, {profile?.display_name}. Manage sessions, your student roster, homework, and outreach.
+          Hello, {profile?.display_name}. Manage sessions, claim recordings you taught, homework, and
+          outreach.
         </p>
       </div>
 
@@ -247,8 +300,24 @@ export function MentorDashboardPage() {
       <div className="card stack" style={{ marginTop: '1.25rem' }}>
         <h2 style={{ margin: 0 }}>Create session</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Adds a new session to the public schedule for students to browse and enroll.
+          Publish an upcoming live session, or log a past session you taught and attach its recording.
         </p>
+        <div className="split-actions" role="group" aria-label="Session type">
+          <button
+            type="button"
+            className={`btn ${sessionMode === 'upcoming' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setSessionMode('upcoming')}
+          >
+            Upcoming live
+          </button>
+          <button
+            type="button"
+            className={`btn ${sessionMode === 'past' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setSessionMode('past')}
+          >
+            Past + recording
+          </button>
+        </div>
         <form className="form" onSubmit={(e) => void addSession(e)}>
           <label>
             Date
@@ -257,7 +326,8 @@ export function MentorDashboardPage() {
               type="date"
               value={sessionDate}
               onChange={(e) => setSessionDate(e.target.value)}
-              min={new Date().toISOString().slice(0, 10)}
+              min={sessionMode === 'upcoming' ? today : undefined}
+              max={sessionMode === 'past' ? today : undefined}
             />
           </label>
           <label className="checkbox-row">
@@ -277,26 +347,40 @@ export function MentorDashboardPage() {
               </select>
             </label>
           )}
+          {sessionMode === 'past' && (
+            <label>
+              Catalog recording (optional)
+              <select value={recordingKey} onChange={(e) => pickRecording(e.target.value)}>
+                <option value="">Paste a URL below, or pick one…</option>
+                {recordings.map((r) => (
+                  <option key={`${r.subjectSlug}:${r.slug}`} value={`${r.subjectSlug}:${r.slug}`}>
+                    {r.subjectName}: {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
-            Time note
+            {sessionMode === 'past' ? 'Label / time note' : 'Time note'}
             <input
               value={timeNote}
               onChange={(e) => setTimeNote(e.target.value)}
               maxLength={120}
-              placeholder="e.g. 4–5pm ET"
+              placeholder={sessionMode === 'past' ? 'e.g. Topics 1.1–1.3' : 'e.g. 4–5pm ET'}
             />
           </label>
           <label>
-            Meeting link (shown after enrollment)
+            {sessionMode === 'past' ? 'Recording URL' : 'Meeting link (shown after enrollment)'}
             <input
               value={meetingUrl}
               onChange={(e) => setMeetingUrl(e.target.value)}
               maxLength={500}
               placeholder="https://…"
+              required={sessionMode === 'past'}
             />
           </label>
           <button className="btn btn-primary" type="submit">
-            Publish session
+            {sessionMode === 'past' ? 'Save as my past session' : 'Publish session'}
           </button>
         </form>
       </div>
@@ -338,6 +422,10 @@ export function MentorDashboardPage() {
 
       <div className="card stack" style={{ marginTop: '1.25rem' }}>
         <h2 style={{ margin: 0 }}>Your sessions</h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Attach or update a recording/meeting link anytime. Mark past open sessions as completed when
+          done.
+        </p>
         {mySlots.length === 0 ? (
           <div className="empty">No sessions yet.</div>
         ) : (
@@ -348,6 +436,8 @@ export function MentorDashboardPage() {
                   <th>Date</th>
                   <th>Topic</th>
                   <th>Status</th>
+                  <th>Link</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -357,6 +447,37 @@ export function MentorDashboardPage() {
                     <td>{s.topics?.name ?? 'Any topic'}</td>
                     <td>
                       <StatusPill status={s.status} />
+                    </td>
+                    <td>
+                      <input
+                        value={linkDrafts[s.id] ?? ''}
+                        onChange={(e) =>
+                          setLinkDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))
+                        }
+                        maxLength={500}
+                        placeholder="https://…"
+                        style={{ minWidth: '12rem' }}
+                      />
+                    </td>
+                    <td>
+                      <div className="split-actions">
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => void saveSessionLink(s.id)}
+                        >
+                          Save link
+                        </button>
+                        {s.status === 'open' && s.session_date <= today && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => void markBooked(s.id)}
+                          >
+                            Mark completed
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
