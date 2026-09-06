@@ -27,19 +27,20 @@ Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, sessi
 
 #### Google OAuth
 1. Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Web application)
-2. Authorized JavaScript origins: `http://localhost:3001` and your production origin (e.g. `https://guhankarthick2.github.io`)
+2. Authorized JavaScript origins: `http://localhost:3001` and `https://beyondtheformula.org`
 3. Authorized redirect URIs: your Supabase callback  
    `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
 4. **Authentication → Providers → Google**: enable, paste Client ID and Client Secret
 
 #### URL configuration
 **Authentication → URL configuration**
-- **Site URL** (production): `https://guhankarthick2.github.io/beyond-the-formula-tutoring`
+- **Site URL** (production): `https://beyondtheformula.org`
 - **Redirect URLs** allow list (one per line):
   - `http://localhost:3001/**`
-  - `https://guhankarthick2.github.io/beyond-the-formula-tutoring/**`
+  - `https://beyondtheformula.org/**`
+  - `https://www.beyondtheformula.org/**`
 
-Keep **Site URL** on the Pages URL (not localhost). Localhost belongs only in the redirect allow list for local dev.
+Keep **Site URL** on the custom domain (not localhost). Localhost belongs only in the redirect allow list for local dev.
 
 #### Session / JWT (token refresh without constant re-login)
 **Authentication → Sessions** (or JWT settings, depending on dashboard version):
@@ -49,10 +50,10 @@ Keep **Site URL** on the Pages URL (not localhost). Localhost belongs only in th
 #### Google OAuth branding verification tips
 - Keep the OAuth **App name** exactly **Beyond The Formula** (same as the home page H1).
 - After deploy, confirm these load **without signing in**:
-  - Home: `https://guhankarthick2.github.io/beyond-the-formula-tutoring/`
-  - Privacy: `https://guhankarthick2.github.io/beyond-the-formula-tutoring/privacy/`
-  - Terms: `https://guhankarthick2.github.io/beyond-the-formula-tutoring/terms/`
-- **Ownership:** verify `github.io` (or your custom domain) in [Google Search Console](https://search.google.com/search-console). Use the HTML tag method: paste the `google-site-verification` meta into `index.html` (there is a commented placeholder), commit, deploy, then click Verify.
+  - Home: `https://beyondtheformula.org/`
+  - Privacy: `https://beyondtheformula.org/privacy/`
+  - Terms: `https://beyondtheformula.org/terms/`
+- **Ownership:** verify `beyondtheformula.org` in [Google Search Console](https://search.google.com/search-console) (Domain property + DNS TXT, or URL-prefix + HTML meta already in `index.html`).
 - Pages source must stay **GitHub Actions** (not “Deploy from a branch”), or the site goes blank again.
 
 ```bash
