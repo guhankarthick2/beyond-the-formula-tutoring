@@ -4,6 +4,9 @@
 # Required repository Actions secrets (or variables) — baked in at build time:
 #   VITE_SUPABASE_URL
 #   VITE_SUPABASE_ANON_KEY
+# Optional (fallback defaults exist in code):
+#   VITE_VOLUNTEER_INTRO_VIDEO_URL
+#   VITE_YOUTUBE_CHANNEL_URL
 # Path: Settings → Secrets and variables → Actions → Repository secrets
 # (Environment secrets on "github-pages" alone are NOT visible to the build job.)
 name: Deploy GitHub Pages
@@ -61,6 +64,8 @@ jobs:
           VITE_BASE_PATH: /
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_VOLUNTEER_INTRO_VIDEO_URL: ${{ secrets.VITE_VOLUNTEER_INTRO_VIDEO_URL || vars.VITE_VOLUNTEER_INTRO_VIDEO_URL }}
+          VITE_YOUTUBE_CHANNEL_URL: ${{ secrets.VITE_YOUTUBE_CHANNEL_URL || vars.VITE_YOUTUBE_CHANNEL_URL }}
 
       # SPA deep links on project Pages fall back through 404.html
       - run: cp dist/index.html dist/404.html

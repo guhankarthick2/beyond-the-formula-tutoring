@@ -33,4 +33,4 @@ export const youtubeChannelUrl =
 
 export const volunteerIntroVideoUrl =
   import.meta.env.VITE_VOLUNTEER_INTRO_VIDEO_URL ||
-  'https://www.youtube.com/embed/dQw4w9WgXcQ'
+  'https://www.youtube.com/embed/Y4476mBsJu0'
