@@ -19,7 +19,7 @@ export function PrivacyPolicyPage() {
       <ul>
         <li>
           <strong>Account information.</strong> Email address (for authentication), password or
-          OAuth credentials handled by our auth provider (Supabase / Google), and a public{' '}
+          OAuth credentials handled by our auth provider (Supabase / Google / GitHub), and a public{' '}
           <strong>display name</strong>.
         </li>
         <li>
@@ -67,7 +67,7 @@ export function PrivacyPolicyPage() {
         </li>
         <li>
           <strong>Service providers.</strong> We use vendors such as Supabase (auth and database),
-          Google (optional Sign in with Google), and hosting providers (for example GitHub Pages) to
+          Google or GitHub (optional social sign-in), and hosting providers (for example GitHub Pages) to
           run the site. They process data on our behalf under their own terms and privacy policies.
         </li>
         <li>

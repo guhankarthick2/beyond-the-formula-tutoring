@@ -23,7 +23,7 @@ Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, sessi
 #### Email / password
 1. **Authentication → Providers → Email**: enable Email provider
 2. Turn **Confirm email** ON for new registrations
-3. Leave magic-link/OTP optional (the app uses password + Google)
+3. Leave magic-link/OTP optional (the app uses password + Google / GitHub)
 
 #### Google OAuth
 1. Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Web application)
@@ -31,6 +31,14 @@ Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, sessi
 3. Authorized redirect URIs: your Supabase callback  
    `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
 4. **Authentication → Providers → Google**: enable, paste Client ID and Client Secret
+
+#### GitHub OAuth (free)
+No paid GitHub plan required — a normal personal account can create an OAuth App.
+1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**
+2. Homepage URL: `https://beyondtheformula.org`
+3. Authorization callback URL: `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
+4. **Authentication → Providers → GitHub**: enable, paste Client ID and Client Secret
+5. See also [Supabase GitHub docs](https://supabase.com/docs/guides/auth/social-login/auth-github)
 
 #### URL configuration
 **Authentication → URL configuration**

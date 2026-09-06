@@ -80,7 +80,7 @@ export function TermsOfServicePage() {
 
       <h2>7. Third-party services</h2>
       <p>
-        Sign-in may use providers such as Google and Supabase. Hosting and video platforms (for
+        Sign-in may use providers such as Google, GitHub, and Supabase. Hosting and video platforms (for
         example YouTube) may be linked from the Service. Your use of those services is also subject
         to their terms and privacy policies.
       </p>

@@ -23,6 +23,7 @@ interface AuthContextValue {
   clearPasswordRecovery: () => void
   refreshProfile: () => Promise<void>
   signInWithGoogle: () => Promise<AuthResult>
+  signInWithGitHub: () => Promise<AuthResult>
   signUpWithPassword: (
     email: string,
     password: string,
@@ -143,6 +144,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error ? friendlyAuthError(error.message) : null }
   }, [])
 
+  const signInWithGitHub = useCallback(async (): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) return notConfigured
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo: authRedirectTo('auth'),
+      },
+    })
+    return { error: error ? friendlyAuthError(error.message) : null }
+  }, [])
+
   const signUpWithPassword = useCallback(
     async (
       email: string,
@@ -222,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearPasswordRecovery,
       refreshProfile,
       signInWithGoogle,
+      signInWithGitHub,
       signUpWithPassword,
       signInWithPassword,
       resetPasswordForEmail,
@@ -241,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearPasswordRecovery,
       refreshProfile,
       signInWithGoogle,
+      signInWithGitHub,
       signUpWithPassword,
       signInWithPassword,
       resetPasswordForEmail,

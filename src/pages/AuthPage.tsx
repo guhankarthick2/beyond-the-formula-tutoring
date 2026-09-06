@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { GitHubMark, GoogleMark } from '@/components/AuthProviderMarks'
 import { useAuth } from '@/lib/auth'
 
 type AuthMode = 'signin' | 'register' | 'forgot' | 'recovery'
@@ -12,6 +13,7 @@ export function AuthPage() {
     loading,
     passwordRecovery,
     signInWithGoogle,
+    signInWithGitHub,
     signUpWithPassword,
     signInWithPassword,
     resetPasswordForEmail,
@@ -27,6 +29,7 @@ export function AuthPage() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [oauthBusy, setOauthBusy] = useState<'google' | 'github' | null>(null)
   const [nameBusy, setNameBusy] = useState(false)
 
   useEffect(() => {
@@ -49,9 +52,17 @@ export function AuthPage() {
 
   async function onGoogle() {
     setError(null)
-    setBusy(true)
+    setOauthBusy('google')
     const { error: err } = await signInWithGoogle()
-    setBusy(false)
+    setOauthBusy(null)
+    if (err) setError(err)
+  }
+
+  async function onGitHub() {
+    setError(null)
+    setOauthBusy('github')
+    const { error: err } = await signInWithGitHub()
+    setOauthBusy(null)
     if (err) setError(err)
   }
 
@@ -215,12 +226,12 @@ export function AuthPage() {
       </h1>
       <p className="lead">
         {mode === 'register'
-          ? 'Register with email or continue with Google. We never show your email on the site.'
+          ? 'Register with email, or continue with Google or GitHub. We never show your email on the site.'
           : mode === 'forgot'
             ? 'We will email you a secure link to choose a new password.'
             : mode === 'recovery'
               ? 'Enter a new password for your account.'
-              : 'Sign in with Google or email. Sessions refresh quietly for about a week.'}
+              : 'Sign in with Google, GitHub, or email. Sessions refresh quietly for about a week.'}
       </p>
 
       {!configured && (
@@ -254,16 +265,28 @@ export function AuthPage() {
 
       {mode !== 'recovery' && mode !== 'forgot' && (
         <>
-          <button
-            className="btn btn-secondary auth-google"
-            type="button"
-            disabled={busy || !configured}
-            onClick={() => void onGoogle()}
-          >
-            Continue with Google
-          </button>
+          <div className="auth-oauth">
+            <button
+              className="btn auth-oauth-btn auth-oauth-google"
+              type="button"
+              disabled={busy || oauthBusy !== null || !configured}
+              onClick={() => void onGoogle()}
+            >
+              <GoogleMark className="auth-oauth-mark" />
+              <span>{oauthBusy === 'google' ? 'Connecting…' : 'Continue with Google'}</span>
+            </button>
+            <button
+              className="btn auth-oauth-btn auth-oauth-github"
+              type="button"
+              disabled={busy || oauthBusy !== null || !configured}
+              onClick={() => void onGitHub()}
+            >
+              <GitHubMark className="auth-oauth-mark" />
+              <span>{oauthBusy === 'github' ? 'Connecting…' : 'Continue with GitHub'}</span>
+            </button>
+          </div>
           <div className="auth-divider" aria-hidden="true">
-            <span>or</span>
+            <span>or use email</span>
           </div>
         </>
       )}
