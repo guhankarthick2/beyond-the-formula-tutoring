@@ -6,8 +6,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
 
   async function onSignOut() {
+    const usedGitHub = user?.identities?.some((i) => i.provider === 'github') ?? false
     await signOut()
     navigate('/', { replace: true })
+    if (
+      usedGitHub &&
+      window.confirm(
+        'Signed out of Beyond The Formula.\n\nAlso sign out of GitHub in this browser so the next “Continue with GitHub” can pick a different account?',
+      )
+    ) {
+      window.open('https://github.com/logout', '_blank', 'noopener,noreferrer')
+    }
   }
 
   return (

@@ -285,6 +285,17 @@ export function AuthPage() {
               <span>{oauthBusy === 'github' ? 'Connecting…' : 'Continue with GitHub'}</span>
             </button>
           </div>
+          <p className="muted auth-oauth-hint">
+            Wrong GitHub account?{' '}
+            <a href="https://github.com/logout" target="_blank" rel="noopener noreferrer">
+              Sign out of GitHub
+            </a>
+            , then return here — or{' '}
+            <a href="https://github.com/settings/applications" target="_blank" rel="noopener noreferrer">
+              revoke this app
+            </a>{' '}
+            under GitHub → Settings → Applications.
+          </p>
           <div className="auth-divider" aria-hidden="true">
             <span>or use email</span>
           </div>

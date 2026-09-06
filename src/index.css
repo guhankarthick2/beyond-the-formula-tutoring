@@ -454,6 +454,17 @@ h3,
   border-color: #32383f;
 }
 
+.auth-oauth-hint {
+  margin: -0.25rem 0 0.85rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.auth-oauth-hint a {
+  font-weight: 600;
+  color: var(--accent, #0f6b4c);
+}
+
 .auth-divider {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
