@@ -150,8 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       provider: 'github',
       options: {
         redirectTo: authRedirectTo('auth'),
-        // Ask GitHub to show the authorization step again (does not always show account picker).
-        queryParams: { prompt: 'consent' },
+        // Forces GitHub's account picker on each sign-in (supported since 2024).
+        queryParams: { prompt: 'select_account' },
       },
     })
     return { error: error ? friendlyAuthError(error.message) : null }
@@ -220,8 +220,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(async () => {
-    // End this browser session and revoke refresh tokens so the app is fully signed out.
-    // Provider sites (GitHub/Google) keep their own cookies — see auth page tip to switch accounts.
     await supabase.auth.signOut({ scope: 'global' })
     setSession(null)
     setProfile(null)
