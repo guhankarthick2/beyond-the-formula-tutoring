@@ -20,25 +20,49 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function slotLine(slot: AvailabilitySlot | null | undefined, mentorLabel?: string) {
+function isRecordingUrl(url: string) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com')
+  } catch {
+    return /youtu\.be|youtube\.com/i.test(url)
+  }
+}
+
+function slotLinkLabel(url: string, past: boolean) {
+  if (isRecordingUrl(url)) return 'Watch Recording'
+  if (past) return 'Session link'
+  return 'Join link'
+}
+
+function slotLine(
+  slot: AvailabilitySlot | null | undefined,
+  opts?: { mentorLabel?: string; past?: boolean },
+) {
   if (!slot) return null
+  const past = opts?.past ?? slot.session_date < todayIso()
   return (
     <>
       <strong>{formatDate(slot.session_date)}</strong>
       {slot.time_note ? ` · ${slot.time_note}` : ''}
       {' — '}
       {slot.topics?.name ?? 'Session'}
-      {mentorLabel ? ` · ${mentorLabel}` : ''}
+      {opts?.mentorLabel ? ` · ${opts.mentorLabel}` : ''}
       {slot.meeting_url && (
         <>
           {' · '}
           <a href={slot.meeting_url} rel="noopener noreferrer">
-            Join link
+            {slotLinkLabel(slot.meeting_url, past)}
           </a>
         </>
       )}
     </>
   )
+}
+
+function pastSessionStatus(status: string) {
+  if (status === 'cancelled') return 'cancelled'
+  return 'completed'
 }
 
 export function StudentMySessionsPage() {
@@ -217,10 +241,10 @@ export function StudentMySessionsPage() {
                     <ul className="schedule-list">
                       {upcomingAttending.map((b) => (
                         <li key={b.id}>
-                          {slotLine(
-                            b.availability_slots,
-                            b.availability_slots?.profiles?.display_name ?? 'Mentor',
-                          )}
+                          {slotLine(b.availability_slots, {
+                            mentorLabel: b.availability_slots?.profiles?.display_name ?? 'Mentor',
+                            past: false,
+                          })}
                         </li>
                       ))}
                     </ul>
@@ -232,10 +256,10 @@ export function StudentMySessionsPage() {
                     <ul className="schedule-list">
                       {pastAttending.map((b) => (
                         <li key={b.id}>
-                          {slotLine(
-                            b.availability_slots,
-                            b.availability_slots?.profiles?.display_name ?? 'Mentor',
-                          )}
+                          {slotLine(b.availability_slots, {
+                            mentorLabel: b.availability_slots?.profiles?.display_name ?? 'Mentor',
+                            past: true,
+                          })}
                         </li>
                       ))}
                     </ul>
@@ -263,7 +287,7 @@ export function StudentMySessionsPage() {
               )}
             </div>
             <p className="muted" style={{ margin: 0 }}>
-              Sessions you published as a mentor (open or booked).
+              Sessions you published as a mentor.
             </p>
             {upcomingTutoring.length === 0 && pastTutoring.length === 0 ? (
               <div className="empty">
@@ -287,7 +311,7 @@ export function StudentMySessionsPage() {
                     <ul className="schedule-list">
                       {upcomingTutoring.map((s) => (
                         <li key={s.id}>
-                          {slotLine(s)}
+                          {slotLine(s, { past: false })}
                           {' · '}
                           <StatusPill status={s.status} />
                         </li>
@@ -301,9 +325,9 @@ export function StudentMySessionsPage() {
                     <ul className="schedule-list">
                       {pastTutoring.map((s) => (
                         <li key={s.id}>
-                          {slotLine(s)}
+                          {slotLine(s, { past: true })}
                           {' · '}
-                          <StatusPill status={s.status} />
+                          <StatusPill status={pastSessionStatus(s.status)} />
                         </li>
                       ))}
                     </ul>

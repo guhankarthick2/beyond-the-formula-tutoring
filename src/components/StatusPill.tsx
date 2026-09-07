@@ -4,7 +4,7 @@ export function StatusPill({ status }: { status: string }) {
       ? 'pill pill-open'
       : status === 'claimed'
         ? 'pill pill-claimed'
-        : status === 'booked'
+        : status === 'booked' || status === 'completed'
           ? 'pill pill-booked'
           : 'pill'
   return <span className={cls}>{status}</span>
