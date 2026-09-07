@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { usePageView } from '@/lib/stats'
 import { catalogRecordings } from '@/lib/subjects'
+import { meetingUrlIdentity, meetingUrlsConflict } from '@/lib/sessionLinks'
 import { supabase } from '@/lib/supabase'
 import type { AvailabilitySlot, RosterStudent } from '@/lib/types'
 import { StatusPill } from '@/components/StatusPill'
@@ -16,6 +17,7 @@ export function MentorDashboardPage() {
   const { topics } = useTopics()
   const recordings = useMemo(() => catalogRecordings(), [])
   const [mySlots, setMySlots] = useState<AvailabilitySlot[]>([])
+  const [takenMeetingUrls, setTakenMeetingUrls] = useState<string[]>([])
   const [roster, setRoster] = useState<RosterStudent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
@@ -28,6 +30,13 @@ export function MentorDashboardPage() {
   const [meetingUrl, setMeetingUrl] = useState('')
   const [recordingKey, setRecordingKey] = useState('')
 
+  const availableRecordings = useMemo(
+    () =>
+      recordings.filter(
+        (r) => !r.href || !takenMeetingUrls.some((u) => meetingUrlsConflict(r.href!, u)),
+      ),
+    [recordings, takenMeetingUrls],
+  )
   const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({})
 
   const [msgStudentId, setMsgStudentId] = useState('')
@@ -59,6 +68,13 @@ export function MentorDashboardPage() {
     setMySlots(slots)
     setLinkDrafts(Object.fromEntries(slots.map((s) => [s.id, s.meeting_url ?? ''])))
 
+    const takenRes = await supabase.rpc('list_taken_meeting_urls')
+    if (!takenRes.error && takenRes.data) {
+      setTakenMeetingUrls(takenRes.data as string[])
+    } else {
+      // Fallback before migration 010: only know about own slots.
+      setTakenMeetingUrls(slots.map((s) => s.meeting_url).filter(Boolean))
+    }
     const slotIds = slots.map((s) => s.id)
     if (slotIds.length === 0) {
       setRoster([])
@@ -102,26 +118,60 @@ export function MentorDashboardPage() {
   function pickRecording(key: string) {
     setRecordingKey(key)
     if (!key) return
-    const rec = recordings.find((r) => `${r.subjectSlug}:${r.slug}` === key)
+    const rec = availableRecordings.find((r) => `${r.subjectSlug}:${r.slug}` === key)
     if (!rec) return
     setMeetingUrl(rec.href ?? '')
     setTimeNote(rec.name)
+  }
+
+  async function assertMeetingUrlAvailable(url: string, excludeSlotId?: string) {
+    const identity = meetingUrlIdentity(url)
+    if (!identity) return null
+    const hit = mySlots.find(
+      (s) => s.id !== excludeSlotId && meetingUrlsConflict(url, s.meeting_url),
+    )
+    if (hit) {
+      return 'That recording is already linked to one of your sessions.'
+    }
+    const taken = takenMeetingUrls.find((u) => meetingUrlsConflict(url, u))
+    if (taken) {
+      const stillMine = mySlots.some(
+        (s) => s.id === excludeSlotId && meetingUrlsConflict(url, s.meeting_url),
+      )
+      if (!stillMine) {
+        return 'That recording is already linked to another session. Ask an admin to remove the existing attribution if it should be reassigned.'
+      }
+    }
+    return null
   }
 
   async function addSession(e: React.FormEvent) {
     e.preventDefault()
     if (!user) return
     const isPast = sessionMode === 'past'
+    const url = meetingUrl.trim()
+    if (url) {
+      const conflict = await assertMeetingUrlAvailable(url)
+      if (conflict) {
+        setError(conflict)
+        return
+      }
+    }
     const { error: err } = await supabase.from('availability_slots').insert({
       tutor_id: user.id,
       topic_id: anyTopic ? null : topicId,
       session_date: sessionDate,
       time_note: timeNote.trim(),
-      meeting_url: meetingUrl.trim(),
+      meeting_url: url,
       status: isPast ? 'booked' : 'open',
     })
-    if (err) setError(err.message)
-    else {
+    if (err) {
+      setError(
+        err.message.includes('already attributed')
+          ? 'That recording or meeting link is already attributed to another session.'
+          : err.message,
+      )
+    } else {
       setOk(
         isPast
           ? 'Past session saved — it counts toward your tutoring history.'
@@ -137,13 +187,25 @@ export function MentorDashboardPage() {
 
   async function saveSessionLink(slotId: string) {
     const url = (linkDrafts[slotId] ?? '').trim()
+    if (url) {
+      const conflict = await assertMeetingUrlAvailable(url, slotId)
+      if (conflict) {
+        setError(conflict)
+        return
+      }
+    }
     const { error: err } = await supabase
       .from('availability_slots')
       .update({ meeting_url: url })
       .eq('id', slotId)
       .eq('tutor_id', user!.id)
-    if (err) setError(err.message)
-    else {
+    if (err) {
+      setError(
+        err.message.includes('already attributed')
+          ? 'That recording or meeting link is already attributed to another session.'
+          : err.message,
+      )
+    } else {
       setOk('Link updated.')
       await load()
     }
@@ -351,8 +413,12 @@ export function MentorDashboardPage() {
             <label>
               Catalog recording (optional)
               <select value={recordingKey} onChange={(e) => pickRecording(e.target.value)}>
-                <option value="">Paste a URL below, or pick one…</option>
-                {recordings.map((r) => (
+                <option value="">
+                  {availableRecordings.length === 0
+                    ? 'All catalog recordings are already attributed'
+                    : 'Paste a URL below, or pick one…'}
+                </option>
+                {availableRecordings.map((r) => (
                   <option key={`${r.subjectSlug}:${r.slug}`} value={`${r.subjectSlug}:${r.slug}`}>
                     {r.subjectName}: {r.name}
                   </option>

@@ -4,8 +4,9 @@ import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { catalogRecordings } from '@/lib/subjects'
+import { meetingUrlsConflict } from '@/lib/sessionLinks'
 import { supabase } from '@/lib/supabase'
-import type { Profile, SessionRequest, StuckQuestion, Topic, TutorStatus } from '@/lib/types'
+import type { AvailabilitySlot, Profile, SessionRequest, StuckQuestion, Topic, TutorStatus } from '@/lib/types'
 
 type Tab = 'tutors' | 'signups' | 'admins' | 'sessions' | 'requests' | 'stuck' | 'cleanup' | 'topics'
 
@@ -39,6 +40,15 @@ export function AdminPage() {
   const [attrTimeNote, setAttrTimeNote] = useState('')
   const [attrRecordingKey, setAttrRecordingKey] = useState('')
   const [attrUrl, setAttrUrl] = useState('')
+  const [attributedSlots, setAttributedSlots] = useState<AvailabilitySlot[]>([])
+
+  const availableRecordings = useMemo(
+    () =>
+      recordings.filter(
+        (r) => !r.href || !attributedSlots.some((s) => meetingUrlsConflict(r.href!, s.meeting_url)),
+      ),
+    [recordings, attributedSlots],
+  )
 
   const [adminSearch, setAdminSearch] = useState('')
   const [adminHits, setAdminHits] = useState<Profile[]>([])
@@ -54,6 +64,7 @@ export function AdminPage() {
       { data: tutorRows, error: tuErr },
       { data: signupRows, error: sErr },
       { data: adminRows, error: aErr },
+      { data: slotRows, error: slotErr },
       { data: reqRows, error: rErr },
       { data: stuckRows, error: stErr },
       { data: topicRows, error: topErr },
@@ -66,6 +77,12 @@ export function AdminPage() {
         .order('display_name'),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(75),
       supabase.from('profiles').select('*').eq('role', 'admin').order('display_name'),
+      supabase
+        .from('availability_slots')
+        .select('*, topics(id, name), profiles!availability_slots_tutor_id_fkey(display_name)')
+        .eq('status', 'booked')
+        .order('session_date', { ascending: false })
+        .limit(100),
       supabase
         .from('session_requests')
         .select(
@@ -86,6 +103,7 @@ export function AdminPage() {
       tuErr?.message ||
       sErr?.message ||
       aErr?.message ||
+      slotErr?.message ||
       rErr?.message ||
       stErr?.message ||
       topErr?.message
@@ -95,6 +113,7 @@ export function AdminPage() {
     setTutors((tutorRows as Profile[]) ?? [])
     setSignups((signupRows as Profile[]) ?? [])
     setAdminList((adminRows as Profile[]) ?? [])
+    setAttributedSlots((slotRows as AvailabilitySlot[]) ?? [])
     setRequests((reqRows as SessionRequest[]) ?? [])
     setStuck((stuckRows as StuckQuestion[]) ?? [])
     setAllTopics((topicRows as Topic[]) ?? [])
@@ -327,25 +346,51 @@ export function AdminPage() {
   function pickRecording(key: string) {
     setAttrRecordingKey(key)
     if (!key) return
-    const rec = recordings.find((r) => `${r.subjectSlug}:${r.slug}` === key)
+    const rec = availableRecordings.find((r) => `${r.subjectSlug}:${r.slug}` === key)
     if (!rec) return
     setAttrUrl(rec.href ?? '')
     setAttrTimeNote(rec.name)
   }
 
+  useEffect(() => {
+    if (!attrRecordingKey) return
+    const stillAvailable = availableRecordings.some(
+      (r) => `${r.subjectSlug}:${r.slug}` === attrRecordingKey,
+    )
+    if (!stillAvailable) {
+      setAttrRecordingKey('')
+      setAttrUrl('')
+    }
+  }, [availableRecordings, attrRecordingKey])
+
   async function attributeSession(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedMentorId || !attrDate) return
+    const url = attrUrl.trim()
+    if (url) {
+      const dup = attributedSlots.find((s) => meetingUrlsConflict(url, s.meeting_url))
+      if (dup) {
+        setError(
+          `That recording is already attributed to ${dup.profiles?.display_name ?? 'a mentor'} on ${formatDate(dup.session_date)}. Remove it first to reassign.`,
+        )
+        return
+      }
+    }
     const { error: err } = await supabase.from('availability_slots').insert({
       tutor_id: selectedMentorId,
       topic_id: attrAnyTopic ? null : attrTopicId || null,
       session_date: attrDate,
       time_note: attrTimeNote.trim(),
-      meeting_url: attrUrl.trim(),
+      meeting_url: url,
       status: 'booked',
     })
-    if (err) setError(err.message)
-    else {
+    if (err) {
+      setError(
+        err.message.includes('already attributed')
+          ? 'That recording or meeting link is already attributed to another session.'
+          : err.message,
+      )
+    } else {
       flash(`Session attributed to ${selectedMentor?.display_name ?? 'mentor'}.`)
       setAttrDate('')
       setAttrTimeNote('')
@@ -353,6 +398,25 @@ export function AdminPage() {
       setAttrRecordingKey('')
       setAttrTopicId('')
       setAttrAnyTopic(true)
+      await load()
+    }
+  }
+
+  async function deleteAttributedSession(slot: AvailabilitySlot) {
+    const mentor = slot.profiles?.display_name ?? 'mentor'
+    const label = slot.time_note || slot.topics?.name || 'session'
+    if (
+      !confirm(
+        `Remove attribution for ${mentor} on ${formatDate(slot.session_date)} (${label})?\n\nThis only removes that mentor’s credit for this session. The YouTube video itself is unchanged. If any students had enrolled in this exact slot, those enrollments are removed too.`,
+      )
+    ) {
+      return
+    }
+    const { error: err } = await supabase.from('availability_slots').delete().eq('id', slot.id)
+    if (err) setError(err.message)
+    else {
+      flash('Attribution removed.')
+      await load()
     }
   }
 
@@ -763,126 +827,184 @@ export function AdminPage() {
       )}
 
       {tab === 'sessions' && (
-        <div className="card stack">
-          <h2 style={{ margin: 0 }}>Attribute a completed session</h2>
-          <p className="muted" style={{ margin: 0 }}>
-            Assign a past session (and optional recording link) to any approved mentor. Mentors can also
-            claim their own recordings from the mentor dashboard.
-          </p>
-          <form className="form" onSubmit={(e) => void attributeSession(e)}>
-            <label>
-              Mentor
-              <input
-                type="search"
-                autoComplete="off"
-                placeholder="Type a display name…"
-                value={selectedMentor ? selectedMentor.display_name : mentorQuery}
-                onChange={(e) => {
-                  setSelectedMentorId('')
-                  setMentorQuery(e.target.value)
-                }}
-              />
-            </label>
-            {!selectedMentorId && mentorQuery.trim() && (
-              <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {mentorMatches.length === 0 ? (
-                  <li className="muted">No matching approved mentors.</li>
-                ) : (
-                  mentorMatches.map((t) => (
-                    <li key={t.id}>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        onClick={() => {
-                          setSelectedMentorId(t.id)
-                          setMentorQuery(t.display_name)
-                        }}
-                      >
-                        {t.display_name}
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            )}
-            {selectedMentorId && (
-              <p className="muted" style={{ margin: 0 }}>
-                Selected: <strong>{selectedMentor?.display_name}</strong>{' '}
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setSelectedMentorId('')
-                    setMentorQuery('')
-                  }}
-                >
-                  Clear
-                </button>
-              </p>
-            )}
-            <label>
-              Session date
-              <input
-                required
-                type="date"
-                value={attrDate}
-                onChange={(e) => setAttrDate(e.target.value)}
-              />
-            </label>
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={attrAnyTopic}
-                onChange={(e) => setAttrAnyTopic(e.target.checked)}
-              />
-              <span>Any curated topic</span>
-            </label>
-            {!attrAnyTopic && (
+        <div className="stack">
+          <div className="card stack">
+            <h2 style={{ margin: 0 }}>Attribute a completed session</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Assign a past session (and optional recording link) to any approved mentor. Mentors can also
+              claim their own recordings from the mentor dashboard.
+            </p>
+            <form className="form" onSubmit={(e) => void attributeSession(e)}>
               <label>
-                Topic
-                <select required value={attrTopicId} onChange={(e) => setAttrTopicId(e.target.value)}>
-                  <option value="">Select</option>
-                  {(allTopics.length ? allTopics : topics).filter((t) => t.active).map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
+                Mentor
+                <input
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Type a display name…"
+                  value={selectedMentor ? selectedMentor.display_name : mentorQuery}
+                  onChange={(e) => {
+                    setSelectedMentorId('')
+                    setMentorQuery(e.target.value)
+                  }}
+                />
+              </label>
+              {!selectedMentorId && mentorQuery.trim() && (
+                <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {mentorMatches.length === 0 ? (
+                    <li className="muted">No matching approved mentors.</li>
+                  ) : (
+                    mentorMatches.map((t) => (
+                      <li key={t.id}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => {
+                            setSelectedMentorId(t.id)
+                            setMentorQuery(t.display_name)
+                          }}
+                        >
+                          {t.display_name}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
+              {selectedMentorId && (
+                <p className="muted" style={{ margin: 0 }}>
+                  Selected: <strong>{selectedMentor?.display_name}</strong>{' '}
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      setSelectedMentorId('')
+                      setMentorQuery('')
+                    }}
+                  >
+                    Clear
+                  </button>
+                </p>
+              )}
+              <label>
+                Session date
+                <input
+                  required
+                  type="date"
+                  value={attrDate}
+                  onChange={(e) => setAttrDate(e.target.value)}
+                />
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={attrAnyTopic}
+                  onChange={(e) => setAttrAnyTopic(e.target.checked)}
+                />
+                <span>Any curated topic</span>
+              </label>
+              {!attrAnyTopic && (
+                <label>
+                  Topic
+                  <select required value={attrTopicId} onChange={(e) => setAttrTopicId(e.target.value)}>
+                    <option value="">Select</option>
+                    {(allTopics.length ? allTopics : topics).filter((t) => t.active).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label>
+                Catalog recording (optional)
+                <select value={attrRecordingKey} onChange={(e) => pickRecording(e.target.value)}>
+                  <option value="">
+                    {availableRecordings.length === 0
+                      ? 'All catalog recordings are already attributed'
+                      : 'Paste a URL below, or pick one…'}
+                  </option>
+                  {availableRecordings.map((r) => (
+                    <option key={`${r.subjectSlug}:${r.slug}`} value={`${r.subjectSlug}:${r.slug}`}>
+                      {r.subjectName}: {r.name}
                     </option>
                   ))}
                 </select>
               </label>
+              <label>
+                Label / time note
+                <input
+                  value={attrTimeNote}
+                  onChange={(e) => setAttrTimeNote(e.target.value)}
+                  maxLength={120}
+                  placeholder="e.g. Topics 1.1–1.3"
+                />
+              </label>
+              <label>
+                Recording or meeting URL
+                <input
+                  value={attrUrl}
+                  onChange={(e) => setAttrUrl(e.target.value)}
+                  maxLength={500}
+                  placeholder="https://…"
+                />
+              </label>
+              <button className="btn btn-primary" type="submit" disabled={!selectedMentorId}>
+                Attribute session
+              </button>
+            </form>
+          </div>
+
+          <div className="card stack">
+            <h2 style={{ margin: 0 }}>Attributed / completed sessions</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Each recording can only be attributed once. Remove attribution to clear that mentor’s
+              credit for the session (the video stays on YouTube / in the catalog).
+            </p>
+            {attributedSlots.length === 0 ? (
+              <div className="empty">No booked sessions yet.</div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Mentor</th>
+                      <th>Label / topic</th>
+                      <th>Link</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attributedSlots.map((s) => (
+                      <tr key={s.id}>
+                        <td>{formatDate(s.session_date)}</td>
+                        <td>{s.profiles?.display_name ?? '—'}</td>
+                        <td>{s.time_note || s.topics?.name || 'Session'}</td>
+                        <td>
+                          {s.meeting_url ? (
+                            <a href={s.meeting_url} rel="noopener noreferrer">
+                              Open
+                            </a>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => void deleteAttributedSession(s)}
+                          >
+                            Remove attribution
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-            <label>
-              Catalog recording (optional)
-              <select value={attrRecordingKey} onChange={(e) => pickRecording(e.target.value)}>
-                <option value="">Paste a URL below, or pick one…</option>
-                {recordings.map((r) => (
-                  <option key={`${r.subjectSlug}:${r.slug}`} value={`${r.subjectSlug}:${r.slug}`}>
-                    {r.subjectName}: {r.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Label / time note
-              <input
-                value={attrTimeNote}
-                onChange={(e) => setAttrTimeNote(e.target.value)}
-                maxLength={120}
-                placeholder="e.g. Topics 1.1–1.3"
-              />
-            </label>
-            <label>
-              Recording or meeting URL
-              <input
-                value={attrUrl}
-                onChange={(e) => setAttrUrl(e.target.value)}
-                maxLength={500}
-                placeholder="https://…"
-              />
-            </label>
-            <button className="btn btn-primary" type="submit" disabled={!selectedMentorId}>
-              Attribute session
-            </button>
-          </form>
+          </div>
         </div>
       )}
 
