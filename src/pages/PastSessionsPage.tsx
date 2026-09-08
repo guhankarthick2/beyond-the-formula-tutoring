@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { PageBack } from '@/components/PageBack'
 import { useAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/hooks'
+import { formatSlotTopics, SLOT_TOPICS_EMBED, slotTopicNames } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { getSubject } from '@/lib/subjects'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
@@ -36,7 +37,7 @@ export function PastSessionsPage() {
     const { data, error: err } = await supabase
       .from('availability_slots')
       .select(
-        '*, topics(id, name), profiles!availability_slots_tutor_id_fkey(display_name)',
+        `*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name)`,
       )
       .eq('status', 'booked')
       .lt('session_date', today)
@@ -147,7 +148,8 @@ export function PastSessionsPage() {
               </thead>
               <tbody>
                 {slots.map((s) => {
-                  const label = s.time_note || s.topics?.name || 'Session'
+                  const topicNames = slotTopicNames(s)
+                  const label = s.time_note || formatSlotTopics(s, 'Session')
                   const mentor = s.profiles?.display_name ?? 'Mentor'
                   const hasRecording = Boolean(s.meeting_url?.trim())
                   return (
@@ -155,9 +157,9 @@ export function PastSessionsPage() {
                       <td>{formatDate(s.session_date)}</td>
                       <td>
                         <strong>{label}</strong>
-                        {s.topics?.name && s.time_note ? (
+                        {topicNames.length > 0 && s.time_note ? (
                           <span className="muted" style={{ display: 'block', fontSize: '0.85rem' }}>
-                            {s.topics.name}
+                            {topicNames.join(', ')}
                           </span>
                         ) : null}
                       </td>

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { catalogRecordings } from '@/lib/subjects'
 import { meetingUrlsConflict } from '@/lib/sessionLinks'
+import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
 import type { AvailabilitySlot, Profile, SessionRequest, StuckQuestion, Topic, TutorStatus } from '@/lib/types'
 
@@ -35,8 +36,7 @@ export function AdminPage() {
   const [mentorQuery, setMentorQuery] = useState('')
   const [selectedMentorId, setSelectedMentorId] = useState('')
   const [attrDate, setAttrDate] = useState('')
-  const [attrTopicId, setAttrTopicId] = useState('')
-  const [attrAnyTopic, setAttrAnyTopic] = useState(true)
+  const [attrTopicIds, setAttrTopicIds] = useState<string[]>([])
   const [attrTimeNote, setAttrTimeNote] = useState('')
   const [attrRecordingKey, setAttrRecordingKey] = useState('')
   const [attrUrl, setAttrUrl] = useState('')
@@ -85,7 +85,7 @@ export function AdminPage() {
       supabase.from('profiles').select('*').eq('role', 'admin').order('display_name'),
       supabase
         .from('availability_slots')
-        .select('*, topics(id, name), profiles!availability_slots_tutor_id_fkey(display_name)')
+        .select(`*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name)`)
         .eq('status', 'booked')
         .order('session_date', { ascending: false })
         .limit(100),
@@ -387,32 +387,56 @@ export function AdminPage() {
 
     const payload = {
       tutor_id: selectedMentorId,
-      topic_id: attrAnyTopic ? null : attrTopicId || null,
       session_date: attrDate,
       time_note: attrTimeNote.trim(),
       meeting_url: url,
       status: 'booked' as const,
     }
 
-    const { error: err } = editingSlotId
-      ? await supabase.from('availability_slots').update(payload).eq('id', editingSlotId)
-      : await supabase.from('availability_slots').insert(payload)
-
-    if (err) {
-      setError(
-        err.message.includes('already attributed')
-          ? 'That recording or meeting link is already used on another past session.'
-          : err.message,
-      )
+    let slotId = editingSlotId
+    if (editingSlotId) {
+      const { error: err } = await supabase
+        .from('availability_slots')
+        .update(payload)
+        .eq('id', editingSlotId)
+      if (err) {
+        setError(
+          err.message.includes('already attributed')
+            ? 'That recording or meeting link is already used on another past session.'
+            : err.message,
+        )
+        return
+      }
     } else {
-      flash(
-        editingSlotId
-          ? `Past session updated for ${selectedMentor?.display_name ?? 'mentor'}.`
-          : `Past session added for ${selectedMentor?.display_name ?? 'mentor'}.`,
-      )
-      resetPastSessionForm()
-      await load()
+      const { data, error: err } = await supabase
+        .from('availability_slots')
+        .insert(payload)
+        .select('id')
+        .single()
+      if (err) {
+        setError(
+          err.message.includes('already attributed')
+            ? 'That recording or meeting link is already used on another past session.'
+            : err.message,
+        )
+        return
+      }
+      slotId = (data as { id: string }).id
     }
+
+    const { error: topicErr } = await replaceSlotTopics(slotId!, attrTopicIds)
+    if (topicErr) {
+      setError(topicErr)
+      return
+    }
+
+    flash(
+      editingSlotId
+        ? `Past session updated for ${selectedMentor?.display_name ?? 'mentor'}.`
+        : `Past session added for ${selectedMentor?.display_name ?? 'mentor'}.`,
+    )
+    resetPastSessionForm()
+    await load()
   }
 
   function resetPastSessionForm() {
@@ -423,8 +447,11 @@ export function AdminPage() {
     setAttrTimeNote('')
     setAttrUrl('')
     setAttrRecordingKey('')
-    setAttrTopicId('')
-    setAttrAnyTopic(true)
+    setAttrTopicIds([])
+  }
+
+  function toggleAttrTopic(id: string) {
+    setAttrTopicIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]))
   }
 
   function startEditPastSession(slot: AvailabilitySlot) {
@@ -436,19 +463,13 @@ export function AdminPage() {
     setAttrTimeNote(slot.time_note ?? '')
     setAttrUrl(slot.meeting_url ?? '')
     setAttrRecordingKey('')
-    if (slot.topic_id) {
-      setAttrAnyTopic(false)
-      setAttrTopicId(slot.topic_id)
-    } else {
-      setAttrAnyTopic(true)
-      setAttrTopicId('')
-    }
+    setAttrTopicIds((slot.slot_topics ?? []).map((r) => r.topic_id))
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function deleteAttributedSession(slot: AvailabilitySlot) {
     const mentor = slot.profiles?.display_name ?? 'mentor'
-    const label = slot.time_note || slot.topics?.name || 'session'
+    const label = slot.time_note || formatSlotTopics(slot, 'session')
     if (
       !confirm(
         `Remove past session for ${mentor} on ${formatDate(slot.session_date)} (${label})?\n\nThis removes the session from the public past-sessions list and clears that mentor’s credit. The YouTube video itself is unchanged. Student enrollments on this slot are removed too.`,
@@ -942,27 +963,23 @@ export function AdminPage() {
                   onChange={(e) => setAttrDate(e.target.value)}
                 />
               </label>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={attrAnyTopic}
-                  onChange={(e) => setAttrAnyTopic(e.target.checked)}
-                />
-                <span>Any curated topic</span>
-              </label>
-              {!attrAnyTopic && (
-                <label>
-                  Topic
-                  <select required value={attrTopicId} onChange={(e) => setAttrTopicId(e.target.value)}>
-                    <option value="">Select</option>
-                    {(allTopics.length ? allTopics : topics).filter((t) => t.active).map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
+              <fieldset className="topic-checklist">
+                <legend>Topics (optional — leave empty for any topic)</legend>
+                <div className="topic-checklist-grid">
+                  {(allTopics.length ? allTopics : topics)
+                    .filter((t) => t.active)
+                    .map((t) => (
+                      <label key={t.id} className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={attrTopicIds.includes(t.id)}
+                          onChange={() => toggleAttrTopic(t.id)}
+                        />
+                        <span>{t.name}</span>
+                      </label>
                     ))}
-                  </select>
-                </label>
-              )}
+                </div>
+              </fieldset>
               <label>
                 Recording picker (optional)
                 <select value={attrRecordingKey} onChange={(e) => pickRecording(e.target.value)}>
@@ -1035,7 +1052,7 @@ export function AdminPage() {
                       <tr key={s.id}>
                         <td>{formatDate(s.session_date)}</td>
                         <td>{s.profiles?.display_name ?? '—'}</td>
-                        <td>{s.time_note || s.topics?.name || 'Session'}</td>
+                        <td>{s.time_note || formatSlotTopics(s, 'Session')}</td>
                         <td>
                           {s.meeting_url ? (
                             <a href={s.meeting_url} rel="noopener noreferrer">

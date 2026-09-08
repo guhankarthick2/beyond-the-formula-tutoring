@@ -27,13 +27,12 @@ export interface Topic {
 export interface AvailabilitySlot {
   id: string
   tutor_id: string
-  topic_id: string | null
   session_date: string
   time_note: string
   meeting_url: string
   status: SlotStatus
   created_at: string
-  topics?: Topic | null
+  slot_topics?: { topic_id: string; topics: Topic | null }[]
   profiles?: Pick<Profile, 'display_name'> | null
 }
 

@@ -4,6 +4,7 @@ import { PageBack } from '@/components/PageBack'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/hooks'
+import { formatSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -46,7 +47,7 @@ function slotLine(
       <strong>{formatDate(slot.session_date)}</strong>
       {slot.time_note ? ` · ${slot.time_note}` : ''}
       {' — '}
-      {slot.topics?.name ?? 'Session'}
+      {formatSlotTopics(slot, 'Session')}
       {opts?.mentorLabel ? ` · ${opts.mentorLabel}` : ''}
       {slot.meeting_url && (
         <>
@@ -83,21 +84,21 @@ export function StudentMySessionsPage() {
     const bookingsQ = supabase
       .from('bookings')
       .select(
-        '*, availability_slots(*, topics(id, name), profiles!availability_slots_tutor_id_fkey(display_name))',
+        `*, availability_slots(*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name))`,
       )
       .eq('student_id', user.id)
       .order('created_at', { ascending: false })
 
     const tutoredQ = supabase
       .from('availability_slots')
-      .select('*, topics(id, name)')
+      .select(`*, ${SLOT_TOPICS_EMBED}`)
       .eq('tutor_id', user.id)
       .neq('status', 'cancelled')
       .order('session_date', { ascending: false })
 
     const hwQ = supabase
       .from('session_homework')
-      .select('*, availability_slots(session_date, topics(name))')
+      .select(`*, availability_slots(session_date, ${SLOT_TOPICS_EMBED})`)
       .order('created_at', { ascending: false })
 
     const msgQ = supabase

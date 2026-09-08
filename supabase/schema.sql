@@ -32,16 +32,21 @@ create table public.topics (
   created_at timestamptz not null default now()
 );
 
--- Tutor open slots. topic_id null = "Any topic"
+-- Tutor open / past sessions. Topics live in slot_topics (empty = "Any topic").
 create table public.availability_slots (
   id uuid primary key default gen_random_uuid(),
   tutor_id uuid not null references public.profiles (id) on delete cascade,
-  topic_id uuid references public.topics (id) on delete set null,
   session_date date not null,
   time_note text not null default '' check (char_length(time_note) <= 120),
   meeting_url text not null default '' check (char_length(meeting_url) <= 500),
   status public.slot_status not null default 'open',
   created_at timestamptz not null default now()
+);
+
+create table public.slot_topics (
+  slot_id uuid not null references public.availability_slots (id) on delete cascade,
+  topic_id uuid not null references public.topics (id) on delete restrict,
+  primary key (slot_id, topic_id)
 );
 
 create table public.bookings (
@@ -91,6 +96,7 @@ create index availability_slots_open_date_idx on public.availability_slots (sess
   where status = 'open';
 create index session_requests_open_idx on public.session_requests (preferred_date)
   where status = 'open';
+create index slot_topics_topic_idx on public.slot_topics (topic_id);
 
 create unique index availability_slots_meeting_url_unique
   on public.availability_slots (meeting_url)
@@ -244,6 +250,7 @@ create trigger session_requests_updated_at
 alter table public.profiles enable row level security;
 alter table public.topics enable row level security;
 alter table public.availability_slots enable row level security;
+alter table public.slot_topics enable row level security;
 alter table public.bookings enable row level security;
 alter table public.session_requests enable row level security;
 alter table public.stuck_questions enable row level security;
@@ -336,6 +343,25 @@ create policy "slots_update_tutor_or_admin"
   on public.availability_slots for update to authenticated
   using (tutor_id = auth.uid() or public.is_admin())
   with check (tutor_id = auth.uid() or public.is_admin());
+
+-- Slot topics (many-to-many tags; empty = Any topic)
+create policy "slot_topics_select"
+  on public.slot_topics for select
+  using (true);
+
+create policy "slot_topics_insert"
+  on public.slot_topics for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.user_owns_slot(slot_id)
+  );
+
+create policy "slot_topics_delete"
+  on public.slot_topics for delete to authenticated
+  using (
+    public.is_admin()
+    or public.user_owns_slot(slot_id)
+  );
 
 -- Bookings
 create policy "bookings_select_participants"

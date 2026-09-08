@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { PageBack } from '@/components/PageBack'
 import { SubjectSelect } from '@/components/SubjectSelect'
 import { useAuth } from '@/lib/auth'
 import { StatusPill } from '@/components/StatusPill'
 import { formatDate, useTopics } from '@/lib/hooks'
+import { formatSlotTopics, slotHasTopic, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { useSubject } from '@/lib/subject'
 import { getSubject } from '@/lib/subjects'
@@ -48,26 +49,30 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    let query = supabase
+    const { data, error: err } = await supabase
       .from('availability_slots')
-      .select('*, topics(id, name, slug), profiles!availability_slots_tutor_id_fkey(display_name)')
+      .select(
+        `*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name)`,
+      )
       .eq('status', 'open')
       .gte('session_date', new Date().toISOString().slice(0, 10))
       .order('session_date')
 
-    if (topicFilter) {
-      query = query.or(`topic_id.eq.${topicFilter},topic_id.is.null`)
-    }
-
-    const { data, error: err } = await query
     if (err) setError(err.message)
     else setSlots((data as AvailabilitySlot[]) ?? [])
     setLoading(false)
-  }, [topicFilter])
+  }, [])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  const visibleSlots = useMemo(() => {
+    if (!topicFilter) return slots
+    return slots.filter(
+      (s) => !(s.slot_topics?.length) || slotHasTopic(s, topicFilter),
+    )
+  }, [slots, topicFilter])
 
   async function enroll(slotId: string) {
     if (!user) return
@@ -137,7 +142,7 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
 
       {loading ? (
         <p className="muted">Loading sessions…</p>
-      ) : slots.length === 0 ? (
+      ) : visibleSlots.length === 0 ? (
         <div className="empty">
           No open sessions right now.{' '}
           <Link to={resourcesPath}>Browse free resources</Link> while you wait.
@@ -155,37 +160,34 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
               </tr>
             </thead>
             <tbody>
-              {slots.map((slot) => {
-                const topicLabel = slot.topics?.name ?? 'Any topic'
-                return (
-                  <tr key={slot.id}>
-                    <td>
-                      {formatDate(slot.session_date)}
-                      <div>
-                        <StatusPill status={slot.status} />
-                      </div>
-                    </td>
-                    <td>{topicLabel}</td>
-                    <td>{slot.profiles?.display_name ?? 'Mentor'}</td>
-                    <td>{slot.time_note || '—'}</td>
-                    <td>
-                      {user ? (
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={() => void enroll(slot.id)}
-                        >
-                          Enroll
-                        </button>
-                      ) : (
-                        <Link className="btn btn-secondary" to="/auth">
-                          Sign in to enroll
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
+              {visibleSlots.map((slot) => (
+                <tr key={slot.id}>
+                  <td>
+                    {formatDate(slot.session_date)}
+                    <div>
+                      <StatusPill status={slot.status} />
+                    </div>
+                  </td>
+                  <td>{formatSlotTopics(slot)}</td>
+                  <td>{slot.profiles?.display_name ?? 'Mentor'}</td>
+                  <td>{slot.time_note || '—'}</td>
+                  <td>
+                    {user ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => void enroll(slot.id)}
+                      >
+                        Enroll
+                      </button>
+                    ) : (
+                      <Link className="btn btn-secondary" to="/auth">
+                        Sign in to enroll
+                      </Link>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

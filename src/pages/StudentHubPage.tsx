@@ -4,6 +4,7 @@ import { PageBack } from '@/components/PageBack'
 import { SubjectMenu } from '@/components/SubjectMenu'
 import { useAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/hooks'
+import { formatSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { useSubject } from '@/lib/subject'
 import { getSubject } from '@/lib/subjects'
@@ -60,7 +61,7 @@ export function StudentSubjectPage() {
       const { data } = await supabase
         .from('bookings')
         .select(
-          '*, availability_slots(*, topics(id, name), profiles!availability_slots_tutor_id_fkey(display_name))',
+          `*, availability_slots(*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name))`,
         )
         .eq('student_id', user.id)
         .order('created_at', { ascending: false })
@@ -172,7 +173,7 @@ export function StudentSubjectPage() {
                       <strong>{slot ? formatDate(slot.session_date) : '—'}</strong>
                       {slot?.time_note ? ` · ${slot.time_note}` : ''}
                       {' — '}
-                      {slot?.topics?.name ?? 'Session'}
+                      {formatSlotTopics(slot, 'Session')}
                       {' · '}
                       {slot?.profiles?.display_name ?? 'Mentor'}
                     </li>
@@ -214,7 +215,7 @@ export function StudentSubjectPage() {
                     <li key={b.id}>
                       {slot ? formatDate(slot.session_date) : '—'}
                       {' — '}
-                      {slot?.topics?.name ?? 'Session'}
+                      {formatSlotTopics(slot, 'Session')}
                     </li>
                   )
                 })}

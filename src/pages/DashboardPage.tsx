@@ -4,6 +4,7 @@ import { EphemeralChat } from '@/components/EphemeralChat'
 import { useAuth } from '@/lib/auth'
 import { StatusPill } from '@/components/StatusPill'
 import { formatDate, useTopics } from '@/lib/hooks'
+import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
 import type { AvailabilitySlot, Booking, SessionRequest } from '@/lib/types'
 
@@ -20,8 +21,7 @@ export function DashboardPage() {
 
   // New availability form
   const [sessionDate, setSessionDate] = useState('')
-  const [topicId, setTopicId] = useState('')
-  const [anyTopic, setAnyTopic] = useState(false)
+  const [topicIds, setTopicIds] = useState<string[]>([])
   const [timeNote, setTimeNote] = useState('')
   const [meetingUrl, setMeetingUrl] = useState('')
 
@@ -37,14 +37,14 @@ export function DashboardPage() {
 
     const slotsQ = supabase
       .from('availability_slots')
-      .select('*, topics(id, name)')
+      .select(`*, ${SLOT_TOPICS_EMBED}`)
       .eq('tutor_id', user.id)
       .order('session_date', { ascending: false })
 
     const bookingsQ = supabase
       .from('bookings')
       .select(
-        '*, availability_slots(*, topics(id, name), profiles!availability_slots_tutor_id_fkey(display_name))',
+        `*, availability_slots(*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name))`,
       )
       .eq('student_id', user.id)
       .order('created_at', { ascending: false })
@@ -103,20 +103,29 @@ export function DashboardPage() {
   async function addAvailability(e: React.FormEvent) {
     e.preventDefault()
     if (!user) return
-    const { error: err } = await supabase.from('availability_slots').insert({
-      tutor_id: user.id,
-      topic_id: anyTopic ? null : topicId,
-      session_date: sessionDate,
-      time_note: timeNote.trim(),
-      meeting_url: meetingUrl.trim(),
-      status: 'open',
-    })
+    const { data, error: err } = await supabase
+      .from('availability_slots')
+      .insert({
+        tutor_id: user.id,
+        session_date: sessionDate,
+        time_note: timeNote.trim(),
+        meeting_url: meetingUrl.trim(),
+        status: 'open',
+      })
+      .select('id')
+      .single()
     if (err) {
       setError(err.message)
       return
     }
+    const { error: topicErr } = await replaceSlotTopics((data as { id: string }).id, topicIds)
+    if (topicErr) {
+      setError(topicErr)
+      return
+    }
     setTimeNote('')
     setMeetingUrl('')
+    setTopicIds([])
     await load()
   }
 
@@ -163,7 +172,7 @@ export function DashboardPage() {
         <div className="card stack" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ margin: 0 }}>Post availability</h2>
           <p className="muted" style={{ margin: 0 }}>
-            Example: Aug 25, 2026 — Polynomials, or Aug 25, 2026 — Any topic.
+            Example: Aug 25, 2026 — Polynomials + Rational functions, or Aug 25, 2026 — Any topic.
           </p>
           <form className="form" onSubmit={(e) => void addAvailability(e)}>
             <label>
@@ -176,23 +185,25 @@ export function DashboardPage() {
                 min={new Date().toISOString().slice(0, 10)}
               />
             </label>
-            <label className="checkbox-row">
-              <input type="checkbox" checked={anyTopic} onChange={(e) => setAnyTopic(e.target.checked)} />
-              <span>Open to any curated topic</span>
-            </label>
-            {!anyTopic && (
-              <label>
-                Topic
-                <select required value={topicId} onChange={(e) => setTopicId(e.target.value)}>
-                  <option value="">Select</option>
-                  {topics.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <fieldset className="topic-checklist">
+              <legend>Topics (optional — leave empty for any topic)</legend>
+              <div className="topic-checklist-grid">
+                {topics.map((t) => (
+                  <label key={t.id} className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={topicIds.includes(t.id)}
+                      onChange={() =>
+                        setTopicIds((prev) =>
+                          prev.includes(t.id) ? prev.filter((id) => id !== t.id) : [...prev, t.id],
+                        )
+                      }
+                    />
+                    <span>{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <label>
               Time note
               <input
@@ -234,7 +245,7 @@ export function DashboardPage() {
                   {mySlots.map((s) => (
                     <tr key={s.id}>
                       <td>{formatDate(s.session_date)}</td>
-                      <td>{s.topics?.name ?? 'Any topic'}</td>
+                      <td>{formatSlotTopics(s)}</td>
                       <td>
                         <StatusPill status={s.status} />
                       </td>
@@ -282,7 +293,7 @@ export function DashboardPage() {
                   return (
                     <tr key={b.id}>
                       <td>{slot ? formatDate(slot.session_date) : '—'}</td>
-                      <td>{slot?.topics?.name ?? 'Any topic'}</td>
+                      <td>{formatSlotTopics(slot)}</td>
                       <td>{slot?.profiles?.display_name ?? 'Tutor'}</td>
                       <td>
                         {slot?.meeting_url ? (

@@ -515,6 +515,29 @@ textarea {
   margin-top: 0.25rem;
 }
 
+.topic-checklist {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.topic-checklist legend {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.topic-checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.35rem 0.75rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
 .alert {
   padding: 0.85rem 1rem;
   border-radius: 10px;

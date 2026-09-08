@@ -5,6 +5,7 @@ import { formatDate, useTopics } from '@/lib/hooks'
 import { usePageView } from '@/lib/stats'
 import { catalogRecordings } from '@/lib/subjects'
 import { meetingUrlIdentity, meetingUrlsConflict } from '@/lib/sessionLinks'
+import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
 import type { AvailabilitySlot, RosterStudent } from '@/lib/types'
 import { StatusPill } from '@/components/StatusPill'
@@ -30,8 +31,7 @@ export function MentorDashboardPage() {
 
   const [sessionMode, setSessionMode] = useState<SessionMode>('upcoming')
   const [sessionDate, setSessionDate] = useState('')
-  const [topicId, setTopicId] = useState('')
-  const [anyTopic, setAnyTopic] = useState(false)
+  const [topicIds, setTopicIds] = useState<string[]>([])
   const [timeNote, setTimeNote] = useState('')
   const [meetingUrl, setMeetingUrl] = useState('')
   const [recordingKey, setRecordingKey] = useState('')
@@ -61,7 +61,7 @@ export function MentorDashboardPage() {
 
     const slotsRes = await supabase
       .from('availability_slots')
-      .select('*, topics(id, name)')
+      .select(`*, ${SLOT_TOPICS_EMBED}`)
       .eq('tutor_id', user.id)
       .order('session_date', { ascending: false })
 
@@ -90,7 +90,7 @@ export function MentorDashboardPage() {
     const rosterRes = await supabase
       .from('bookings')
       .select(
-        'student_id, slot_id, profiles!bookings_student_id_fkey(id, display_name), availability_slots(session_date, topics(name))',
+        `student_id, slot_id, profiles!bookings_student_id_fkey(id, display_name), availability_slots(session_date, ${SLOT_TOPICS_EMBED})`,
       )
       .in('slot_id', slotIds)
 
@@ -103,14 +103,12 @@ export function MentorDashboardPage() {
           ? row.availability_slots[0]
           : row.availability_slots
         if (!profile) continue
-        const topicRaw = slot?.topics as { name?: string } | { name?: string }[] | null | undefined
-        const topicName = Array.isArray(topicRaw) ? topicRaw[0]?.name : topicRaw?.name
         rows.push({
           id: profile.id,
           display_name: profile.display_name,
           slot_id: row.slot_id,
           session_date: slot?.session_date ?? '',
-          topic_name: topicName ?? 'Session',
+          topic_name: formatSlotTopics(slot as unknown as Pick<AvailabilitySlot, 'slot_topics'>, 'Session'),
         })
       }
       setRoster(rows)
@@ -163,14 +161,17 @@ export function MentorDashboardPage() {
         return
       }
     }
-    const { error: err } = await supabase.from('availability_slots').insert({
-      tutor_id: user.id,
-      topic_id: anyTopic ? null : topicId,
-      session_date: sessionDate,
-      time_note: timeNote.trim(),
-      meeting_url: url,
-      status: isPast ? 'booked' : 'open',
-    })
+    const { data, error: err } = await supabase
+      .from('availability_slots')
+      .insert({
+        tutor_id: user.id,
+        session_date: sessionDate,
+        time_note: timeNote.trim(),
+        meeting_url: url,
+        status: isPast ? 'booked' : 'open',
+      })
+      .select('id')
+      .single()
     if (err) {
       setError(
         err.message.includes('already attributed')
@@ -178,6 +179,11 @@ export function MentorDashboardPage() {
           : err.message,
       )
     } else {
+      const { error: topicErr } = await replaceSlotTopics((data as { id: string }).id, topicIds)
+      if (topicErr) {
+        setError(topicErr)
+        return
+      }
       setOk(
         isPast
           ? 'Past session saved — students can enroll to unlock the recording.'
@@ -187,6 +193,7 @@ export function MentorDashboardPage() {
       setMeetingUrl('')
       setRecordingKey('')
       setSessionDate('')
+      setTopicIds([])
       await load()
     }
   }
@@ -399,23 +406,25 @@ export function MentorDashboardPage() {
               max={sessionMode === 'past' ? today : undefined}
             />
           </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={anyTopic} onChange={(e) => setAnyTopic(e.target.checked)} />
-            <span>Open to any curated topic</span>
-          </label>
-          {!anyTopic && (
-            <label>
-              Topic
-              <select required value={topicId} onChange={(e) => setTopicId(e.target.value)}>
-                <option value="">Select</option>
-                {topics.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <fieldset className="topic-checklist">
+            <legend>Topics (optional — leave empty for any topic)</legend>
+            <div className="topic-checklist-grid">
+              {topics.map((t) => (
+                <label key={t.id} className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={topicIds.includes(t.id)}
+                    onChange={() =>
+                      setTopicIds((prev) =>
+                        prev.includes(t.id) ? prev.filter((id) => id !== t.id) : [...prev, t.id],
+                      )
+                    }
+                  />
+                  <span>{t.name}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
           {sessionMode === 'past' && (
             <label>
               Catalog recording (optional)
@@ -470,7 +479,7 @@ export function MentorDashboardPage() {
               <option value="">Select session</option>
               {bookedSlots.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {formatDate(s.session_date)} — {s.topics?.name ?? 'Any topic'} (
+                  {formatDate(s.session_date)} — {formatSlotTopics(s)} (
                   {displaySlotStatus(s.status, s.session_date, today)})
                 </option>
               ))}
@@ -518,7 +527,7 @@ export function MentorDashboardPage() {
                 {mySlots.map((s) => (
                   <tr key={s.id}>
                     <td>{formatDate(s.session_date)}</td>
-                    <td>{s.topics?.name ?? 'Any topic'}</td>
+                    <td>{formatSlotTopics(s)}</td>
                     <td>
                       <StatusPill status={displaySlotStatus(s.status, s.session_date, today)} />
                     </td>
