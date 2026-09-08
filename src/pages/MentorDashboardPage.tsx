@@ -237,6 +237,32 @@ export function MentorDashboardPage() {
     }
   }
 
+  async function cancelSession(slot: AvailabilitySlot) {
+    const label = slot.time_note || formatSlotTopics(slot)
+    const note = window.prompt(
+      `Cancel your upcoming session on ${formatDate(slot.session_date)} (${label})?\n\nOptional note for enrolled students (or leave blank):`,
+      '',
+    )
+    if (note === null) return
+
+    setError(null)
+    const { data, error: err } = await supabase.rpc('cancel_session', {
+      p_slot_id: slot.id,
+      p_note: note.trim(),
+    })
+    if (err) {
+      setError(err.message)
+      return
+    }
+    const notified = typeof data === 'number' ? data : 0
+    setOk(
+      notified === 0
+        ? 'Session cancelled. No students were enrolled yet.'
+        : `Session cancelled. Notified ${notified} enrolled student${notified === 1 ? '' : 's'}.`,
+    )
+    await load()
+  }
+
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault()
     if (!user || !msgStudentId || !msgBody.trim()) return
@@ -507,7 +533,8 @@ export function MentorDashboardPage() {
         <h2 style={{ margin: 0 }}>Your sessions</h2>
         <p className="muted" style={{ margin: 0 }}>
           Attach or update a recording anytime. Students who enroll in that past session can unlock it.
-          Mark past open sessions as completed when done.
+          Cancel upcoming sessions to notify enrolled students. Mark past open sessions as completed when
+          done.
         </p>
         {mySlots.length === 0 ? (
           <div className="empty">No sessions yet.</div>
@@ -558,6 +585,15 @@ export function MentorDashboardPage() {
                             onClick={() => void markBooked(s.id)}
                           >
                             Mark completed
+                          </button>
+                        )}
+                        {s.status !== 'cancelled' && s.session_date >= today && (
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => void cancelSession(s)}
+                          >
+                            Cancel session
                           </button>
                         )}
                       </div>

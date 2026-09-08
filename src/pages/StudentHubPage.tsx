@@ -100,7 +100,9 @@ export function StudentSubjectPage() {
   const schedulePath = `/students/${subject.slug}/schedule`
   const resourcesPath = `/students/resources/${subject.slug}`
   const pastPath = `/students/${subject.slug}/past`
+  const questionsPath = `/students/${subject.slug}/questions`
   const testPath = `/students/${subject.slug}/tests/unit-1`
+  const hasUnit1Test = subject.slug === 'precal'
 
   return (
     <section className="section">
@@ -135,6 +137,16 @@ export function StudentSubjectPage() {
             Browse past sessions
           </Link>
         </article>
+        <article className="card card-accent card-student stack">
+          <h3>Open questions</h3>
+          <p>
+            Free-form help for {subject.shortName}. Ask anything; approved mentors answer when they
+            can.
+          </p>
+          <Link className="btn btn-primary" to={questionsPath}>
+            Ask or browse
+          </Link>
+        </article>
         <article className="card stack">
           <h3>Other materials</h3>
           <p>Worksheets, notes, topic lists, and extra practice for {subject.shortName}.</p>
@@ -142,13 +154,15 @@ export function StudentSubjectPage() {
             Browse materials
           </Link>
         </article>
-        <article className="card card-accent card-student stack">
-          <h3>Want to take a test in {subject.shortName}?</h3>
-          <p>Start the Unit 1 practice assessment — open to everyone, no enrollment required.</p>
-          <Link className="btn btn-primary" to={testPath}>
-            Take the PreCal test
-          </Link>
-        </article>
+        {hasUnit1Test && (
+          <article className="card card-accent card-student stack">
+            <h3>Want to take a test in {subject.shortName}?</h3>
+            <p>Start the Unit 1 practice assessment — open to everyone, no enrollment required.</p>
+            <Link className="btn btn-primary" to={testPath}>
+              Take the PreCal test
+            </Link>
+          </article>
+        )}
       </div>
 
       {loadingEnroll && user ? (

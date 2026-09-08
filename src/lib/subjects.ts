@@ -140,11 +140,28 @@ export const SUBJECTS: Subject[] = [
         href: '/students/precal/schedule',
       },
       {
-        id: 'precal-stuck',
+        id: 'precal-questions',
         kind: 'link',
-        title: 'Stuck points forum',
-        description: 'Post a question on a curated topic — mentors and peers can help.',
-        href: '/stuck',
+        title: 'Open questions',
+        description: 'Free-form help — ask anything in PreCal; mentors answer when they can.',
+        href: '/students/precal/questions',
+      },
+    ],
+  },
+  {
+    slug: 'sat',
+    name: 'SAT Math',
+    shortName: 'SAT',
+    description:
+      'SAT Math practice help — free open questions for mentors to answer when they can.',
+    recordings: [],
+    resources: [
+      {
+        id: 'sat-questions',
+        kind: 'link',
+        title: 'Open questions',
+        description: 'Post a free-form SAT Math question — any approved mentor can answer.',
+        href: '/students/sat/questions',
       },
     ],
   },
@@ -153,8 +170,11 @@ export const SUBJECTS: Subject[] = [
 export const COMING_SOON_SUBJECTS = [
   { slug: 'algebra', name: 'Algebra' },
   { slug: 'calculus', name: 'Calculus' },
-  { slug: 'sat', name: 'SAT' },
 ]
+
+/** Slugs allowed on stuck_questions.subject_slug */
+export const QUESTION_SUBJECT_SLUGS = SUBJECTS.map((s) => s.slug) as string[]
+
 
 export function getSubject(slug: string | undefined | null): Subject | undefined {
   if (!slug) return undefined

@@ -1,9 +1,13 @@
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
+import { useMessageInbox } from '@/lib/messageInbox'
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, signOut, isApprovedTutor, isAdmin } = useAuth()
+  const { unreadCount } = useMessageInbox()
   const navigate = useNavigate()
+  const location = useLocation()
+  const onMySessions = location.pathname.includes('/students/my-sessions')
 
   async function onSignOut() {
     await signOut()
@@ -44,8 +48,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
               Mentors
             </NavLink>
             {user && (
-              <NavLink className="btn btn-ghost" to="/students/my-sessions">
+              <NavLink className="btn btn-ghost nav-with-badge" to="/students/my-sessions">
                 My sessions
+                {unreadCount > 0 && (
+                  <span
+                    className="nav-alert"
+                    aria-label={`${unreadCount} new mentor message${unreadCount === 1 ? '' : 's'}`}
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </NavLink>
             )}
             {isApprovedTutor && (
@@ -76,6 +88,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
+      {user && unreadCount > 0 && !onMySessions && (
+        <div className="message-banner" role="status">
+          <p>
+            You have {unreadCount === 1 ? 'a new mentor message' : `${unreadCount} new mentor messages`}.{' '}
+            <Link to="/students/my-sessions">Open My sessions</Link> to read
+            {unreadCount === 1 ? ' it' : ' them'}.
+          </p>
+        </div>
+      )}
       <main id="main-content" className="main">
         {children}
       </main>

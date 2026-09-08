@@ -989,6 +989,47 @@ td .split-actions {
   font-size: 0.875rem;
 }
 
+.nav-with-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.nav-alert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--warn, #b45309);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.message-banner {
+  border-bottom: 1px solid #f0d7a8;
+  background: #fff8e8;
+  color: var(--ink);
+}
+
+.message-banner p {
+  margin: 0;
+  max-width: 1100px;
+  margin-inline: auto;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+}
+
+.message-banner a {
+  font-weight: 700;
+  color: var(--accent-hover);
+}
+
 .footer-note {
   margin-top: 0.35rem;
   font-size: 0.85rem;

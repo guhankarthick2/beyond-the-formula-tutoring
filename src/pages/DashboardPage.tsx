@@ -156,6 +156,23 @@ export function DashboardPage() {
     await load()
   }
 
+  async function cancelEnrollment(slotId: string) {
+    if (
+      !confirm(
+        'Cancel your enrollment in this upcoming session? The seat will open for another student if no one else is enrolled.',
+      )
+    ) {
+      return
+    }
+    setError(null)
+    const { error: err } = await supabase.rpc('cancel_enrollment', { p_slot_id: slotId })
+    if (err) {
+      setError(err.message)
+      return
+    }
+    await load()
+  }
+
   if (!user) {
     return <Navigate to="/auth" replace />
   }
@@ -305,15 +322,28 @@ export function DashboardPage() {
                         )}
                       </td>
                       <td>
-                        {slot && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => setChatKey(`slot:${slot.id}`)}
-                          >
-                            Chat
-                          </button>
-                        )}
+                        <div className="split-actions">
+                          {slot && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => setChatKey(`slot:${slot.id}`)}
+                            >
+                              Chat
+                            </button>
+                          )}
+                          {slot &&
+                            slot.session_date >= new Date().toISOString().slice(0, 10) &&
+                            slot.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => void cancelEnrollment(slot.id)}
+                              >
+                                Cancel
+                              </button>
+                            )}
+                        </div>
                       </td>
                     </tr>
                   )

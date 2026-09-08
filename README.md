@@ -1,6 +1,7 @@
 # Beyond The Formula Tutoring
 
-Free nonprofit precalculus tutoring app: volunteer tutors, curated topics, session booking, student requests, ephemeral chat, and text-only stuck-point Q&A.
+Free nonprofit math tutoring app: volunteer mentors, session booking, past-session recordings,
+ephemeral chat, and subject-scoped open Q&A (PreCal, SAT, and more).
 
 **No photo uploads. No public email or personal contact details.**
 
@@ -127,13 +128,28 @@ If you already ran an older `schema.sql`, also run newer files under `supabase/m
 | Book | Students book open slots |
 | Request | Students request topic + date even if recordings exist; tutors claim & propose |
 | Chat | Supabase Realtime broadcast — **not stored** |
-| Stuck points | Text Q&A on curated topics only |
-| Admin | Approve/revoke tutors, rename sign-ups, cancel/delete requests, close/delete stuck threads, purge old data |
+| Open questions | Free-form Q&A by subject (`/students/:slug/questions`); optional email notify on reply |
+| Admin | Approve mentors, moderate sessions/messages, hard-delete Q&A threads and answers |
+
+## Q&A email notify (optional)
+
+Replies can optionally email the other party **without exposing addresses**. Deploy the Edge Function and set secrets:
+
+```bash
+supabase functions deploy notify-qa-reply
+supabase secrets set RESEND_API_KEY=re_xxx
+supabase secrets set NOTIFY_FROM_EMAIL="Beyond The Formula <noreply@beyondtheformula.org>"
+supabase secrets set SITE_URL=https://beyondtheformula.org
+```
+
+Uses [Resend](https://resend.com). If `RESEND_API_KEY` is missing, the in-app reply still posts; the UI explains that email notify is unavailable.
+
+Also run migration `015_subject_questions.sql` so questions store `subject_slug` and allow null `topic_id`.
 
 ## Privacy
 
 - Public UI uses **display names only**
-- Email is for login only (never shown on profiles)
+- Email is for login only (never shown on profiles); Q&A notify is server-side only
 - Chat warns against sharing personal contact info
 - No image storage
 

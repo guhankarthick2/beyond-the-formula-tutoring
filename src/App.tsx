@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { AuthProvider } from '@/lib/auth'
+import { MessageInboxProvider } from '@/lib/messageInbox'
 import { SubjectProvider } from '@/lib/subject'
 import { AdminPage } from '@/pages/AdminPage'
 import { AuthPage } from '@/pages/AuthPage'
@@ -12,8 +13,13 @@ import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 import { RequestPage } from '@/pages/RequestPage'
 import { ResourcesPage } from '@/pages/ResourcesPage'
 import { ScheduleRedirect, SessionsPage } from '@/pages/SessionsPage'
-import { StuckDetailPage, StuckListPage } from '@/pages/StuckPage'
 import { PastSessionsPage, RecordingsRedirect } from '@/pages/PastSessionsPage'
+import {
+  QuestionsDetailPage,
+  QuestionsListPage,
+  StuckDetailRedirect,
+  StuckListRedirect,
+} from '@/pages/QuestionsPage'
 import { StudentHubPage, StudentSubjectPage } from '@/pages/StudentHubPage'
 import { StudentMySessionsPage } from '@/pages/StudentMySessionsPage'
 import { TermsOfServicePage } from '@/pages/TermsOfServicePage'
@@ -22,10 +28,11 @@ import { Unit1TestPage } from '@/pages/Unit1TestPage'
 export default function App() {
   return (
     <AuthProvider>
-      <SubjectProvider>
-        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
-          <Layout>
-            <Routes>
+      <MessageInboxProvider>
+        <SubjectProvider>
+          <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
+            <Layout>
+              <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/students" element={<StudentHubPage />} />
               <Route path="/students/resources" element={<ResourcesPage />} />
@@ -38,6 +45,8 @@ export default function App() {
               <Route path="/students/:subjectSlug/schedule" element={<SessionsPage />} />
               <Route path="/students/:subjectSlug/past" element={<PastSessionsPage />} />
               <Route path="/students/:subjectSlug/recordings" element={<RecordingsRedirect />} />
+              <Route path="/students/:subjectSlug/questions" element={<QuestionsListPage />} />
+              <Route path="/students/:subjectSlug/questions/:id" element={<QuestionsDetailPage />} />
               <Route path="/mentors" element={<MentorHomePage />} />
               <Route path="/mentors/dashboard" element={<MentorDashboardPage />} />
               <Route path="/auth" element={<AuthPage />} />
@@ -46,15 +55,16 @@ export default function App() {
               <Route path="/volunteer" element={<Navigate to="/mentors" replace />} />
               <Route path="/sessions" element={<ScheduleRedirect />} />
               <Route path="/request" element={<RequestPage />} />
-              <Route path="/stuck" element={<StuckListPage />} />
-              <Route path="/stuck/:id" element={<StuckDetailPage />} />
+              <Route path="/stuck" element={<StuckListRedirect />} />
+              <Route path="/stuck/:id" element={<StuckDetailRedirect />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Layout>
         </BrowserRouter>
-      </SubjectProvider>
+        </SubjectProvider>
+      </MessageInboxProvider>
     </AuthProvider>
   )
 }

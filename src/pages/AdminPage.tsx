@@ -7,9 +7,27 @@ import { catalogRecordings } from '@/lib/subjects'
 import { meetingUrlsConflict } from '@/lib/sessionLinks'
 import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
-import type { AvailabilitySlot, Profile, SessionRequest, StuckQuestion, Topic, TutorStatus } from '@/lib/types'
+import type {
+  AvailabilitySlot,
+  MentorMessage,
+  Profile,
+  SessionRequest,
+  StuckAnswer,
+  StuckQuestion,
+  Topic,
+  TutorStatus,
+} from '@/lib/types'
 
-type Tab = 'tutors' | 'signups' | 'admins' | 'sessions' | 'requests' | 'stuck' | 'cleanup' | 'topics'
+type Tab =
+  | 'tutors'
+  | 'signups'
+  | 'admins'
+  | 'sessions'
+  | 'requests'
+  | 'stuck'
+  | 'messages'
+  | 'cleanup'
+  | 'topics'
 
 export function AdminPage() {
   const { isAdmin, user, profile, isApprovedTutor, refreshProfile } = useAuth()
@@ -21,6 +39,10 @@ export function AdminPage() {
   const [signups, setSignups] = useState<Profile[]>([])
   const [requests, setRequests] = useState<SessionRequest[]>([])
   const [stuck, setStuck] = useState<StuckQuestion[]>([])
+  const [stuckAnswers, setStuckAnswers] = useState<
+    (StuckAnswer & { stuck_questions?: Pick<StuckQuestion, 'id' | 'title' | 'subject_slug'> | null })[]
+  >([])
+  const [mentorMessages, setMentorMessages] = useState<MentorMessage[]>([])
   const [allTopics, setAllTopics] = useState<Topic[]>([])
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
@@ -73,6 +95,8 @@ export function AdminPage() {
       { data: slotRows, error: slotErr },
       { data: reqRows, error: rErr },
       { data: stuckRows, error: stErr },
+      { data: stuckAnswerRows, error: saErr },
+      { data: msgRows, error: msgErr },
       { data: topicRows, error: topErr },
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('tutor_status', 'pending').order('created_at'),
@@ -101,6 +125,20 @@ export function AdminPage() {
         .select('*, topics(id, name), profiles!stuck_questions_author_id_fkey(display_name)')
         .order('created_at', { ascending: false })
         .limit(100),
+      supabase
+        .from('stuck_answers')
+        .select(
+          '*, profiles!stuck_answers_author_id_fkey(display_name), stuck_questions(id, title, subject_slug)',
+        )
+        .order('created_at', { ascending: false })
+        .limit(100),
+      supabase
+        .from('mentor_messages')
+        .select(
+          '*, tutor:profiles!mentor_messages_tutor_id_fkey(display_name), student:profiles!mentor_messages_student_id_fkey(display_name)',
+        )
+        .order('created_at', { ascending: false })
+        .limit(100),
       supabase.from('topics').select('*').order('sort_order'),
     ])
 
@@ -112,6 +150,8 @@ export function AdminPage() {
       slotErr?.message ||
       rErr?.message ||
       stErr?.message ||
+      saErr?.message ||
+      msgErr?.message ||
       topErr?.message
     if (firstErr) setError(firstErr)
 
@@ -122,6 +162,12 @@ export function AdminPage() {
     setAttributedSlots((slotRows as AvailabilitySlot[]) ?? [])
     setRequests((reqRows as SessionRequest[]) ?? [])
     setStuck((stuckRows as StuckQuestion[]) ?? [])
+    setStuckAnswers(
+      (stuckAnswerRows as (StuckAnswer & {
+        stuck_questions?: Pick<StuckQuestion, 'id' | 'title' | 'subject_slug'> | null
+      })[]) ?? [],
+    )
+    setMentorMessages((msgRows as MentorMessage[]) ?? [])
     setAllTopics((topicRows as Topic[]) ?? [])
   }, [isAdmin])
 
@@ -257,11 +303,31 @@ export function AdminPage() {
   }
 
   async function deleteStuck(id: string) {
-    if (!confirm('Delete this stuck-point thread and its answers?')) return
+    if (!confirm('Delete this question thread and its answers?')) return
     const { error: err } = await supabase.from('stuck_questions').delete().eq('id', id)
     if (err) setError(err.message)
     else {
-      flash('Stuck-point thread deleted.')
+      flash('Question thread deleted.')
+      await load()
+    }
+  }
+
+  async function deleteStuckAnswer(id: string) {
+    if (!confirm('Permanently delete this answer?')) return
+    const { error: err } = await supabase.from('stuck_answers').delete().eq('id', id)
+    if (err) setError(err.message)
+    else {
+      flash('Answer deleted.')
+      await load()
+    }
+  }
+
+  async function deleteMentorMessage(id: string) {
+    if (!confirm('Permanently delete this mentor message? This cannot be undone.')) return
+    const { error: err } = await supabase.from('mentor_messages').delete().eq('id', id)
+    if (err) setError(err.message)
+    else {
+      flash('Message deleted.')
       await load()
     }
   }
@@ -512,7 +578,8 @@ export function AdminPage() {
     { id: 'admins', label: 'Admins' },
     { id: 'sessions', label: 'Sessions' },
     { id: 'requests', label: 'Requests' },
-    { id: 'stuck', label: 'Stuck points' },
+    { id: 'stuck', label: 'Questions' },
+    { id: 'messages', label: 'Messages' },
     { id: 'cleanup', label: 'Cleanup' },
     { id: 'topics', label: 'Topics' },
   ]
@@ -1132,41 +1199,138 @@ export function AdminPage() {
       )}
 
       {tab === 'stuck' && (
+        <div className="stack">
+          <div className="card stack">
+            <h2 style={{ margin: 0 }}>Open question threads</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Subject-scoped free-form Q&amp;A. Close threads or hard-delete them (answers cascade).
+            </p>
+            {stuck.length === 0 ? (
+              <div className="empty">No question threads.</div>
+            ) : (
+              <div className="stack">
+                {stuck.map((q) => (
+                  <article key={q.id} className="card" style={{ boxShadow: 'none' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: '0.75rem',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <h3 style={{ margin: 0 }}>
+                        <Link to={`/students/${q.subject_slug || 'precal'}/questions/${q.id}`}>
+                          {q.title}
+                        </Link>
+                      </h3>
+                      <StatusPill status={q.status} />
+                    </div>
+                    <p className="muted" style={{ margin: '0.35rem 0', fontSize: '0.9rem' }}>
+                      {q.subject_slug || 'precal'}
+                      {q.topics?.name ? ` · ${q.topics.name}` : ''} · {q.profiles?.display_name} ·{' '}
+                      {formatDate(q.created_at.slice(0, 10))}
+                    </p>
+                    <p style={{ margin: '0 0 0.75rem' }}>
+                      {q.body.slice(0, 180)}
+                      {q.body.length > 180 ? '…' : ''}
+                    </p>
+                    <div className="split-actions">
+                      {q.status !== 'closed' && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => void closeStuck(q.id)}
+                        >
+                          Close
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => void deleteStuck(q.id)}
+                      >
+                        Delete thread
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card stack">
+            <h2 style={{ margin: 0 }}>Answers (moderation)</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Hard-delete an individual answer without removing the whole thread.
+            </p>
+            {stuckAnswers.length === 0 ? (
+              <div className="empty">No answers yet.</div>
+            ) : (
+              <div className="stack">
+                {stuckAnswers.map((a) => {
+                  const q = Array.isArray(a.stuck_questions)
+                    ? a.stuck_questions[0]
+                    : a.stuck_questions
+                  return (
+                    <article key={a.id} className="card" style={{ boxShadow: 'none' }}>
+                      <p className="muted" style={{ margin: '0 0 0.35rem', fontSize: '0.9rem' }}>
+                        {q?.subject_slug || 'precal'} · on{' '}
+                        {q ? (
+                          <Link to={`/students/${q.subject_slug || 'precal'}/questions/${q.id}`}>
+                            {q.title}
+                          </Link>
+                        ) : (
+                          'question'
+                        )}{' '}
+                        · {a.profiles?.display_name} · {formatDate(a.created_at.slice(0, 10))}
+                      </p>
+                      <p style={{ margin: '0 0 0.75rem', whiteSpace: 'pre-wrap' }}>
+                        {a.body.slice(0, 240)}
+                        {a.body.length > 240 ? '…' : ''}
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        onClick={() => void deleteStuckAnswer(a.id)}
+                      >
+                        Delete answer
+                      </button>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'messages' && (
         <div className="card stack">
-          <h2 style={{ margin: 0 }}>Stuck-point threads</h2>
+          <h2 style={{ margin: 0 }}>Mentor messages</h2>
           <p className="muted" style={{ margin: 0 }}>
-            Close threads or delete them (answers are removed with the question). Chat is ephemeral and
-            does not need cleanup.
+            One-way notes from mentors to students. Students can dismiss from their inbox; admins can
+            hard-delete for moderation. Messages cannot be edited after send.
           </p>
-          {stuck.length === 0 ? (
-            <div className="empty">No stuck-point threads.</div>
+          {mentorMessages.length === 0 ? (
+            <div className="empty">No mentor messages.</div>
           ) : (
             <div className="stack">
-              {stuck.map((q) => (
-                <article key={q.id} className="card" style={{ boxShadow: 'none' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <h3 style={{ margin: 0 }}>
-                      <Link to={`/stuck/${q.id}`}>{q.title}</Link>
-                    </h3>
-                    <StatusPill status={q.status} />
-                  </div>
-                  <p className="muted" style={{ margin: '0.35rem 0', fontSize: '0.9rem' }}>
-                    {q.topics?.name} · {q.profiles?.display_name} · {formatDate(q.created_at.slice(0, 10))}
+              {mentorMessages.map((m) => (
+                <article key={m.id} className="card" style={{ boxShadow: 'none' }}>
+                  <p className="muted" style={{ margin: '0 0 0.35rem', fontSize: '0.9rem' }}>
+                    {m.tutor?.display_name ?? 'Mentor'} → {m.student?.display_name ?? 'Student'} ·{' '}
+                    {formatDate(m.created_at.slice(0, 10))}
+                    {m.dismissed_at ? ' · dismissed by student' : ''}
                   </p>
-                  <p style={{ margin: '0 0 0.75rem' }}>
-                    {q.body.slice(0, 180)}
-                    {q.body.length > 180 ? '…' : ''}
-                  </p>
-                  <div className="split-actions">
-                    {q.status !== 'closed' && (
-                      <button type="button" className="btn btn-secondary" onClick={() => void closeStuck(q.id)}>
-                        Close
-                      </button>
-                    )}
-                    <button type="button" className="btn btn-danger" onClick={() => void deleteStuck(q.id)}>
-                      Delete thread
-                    </button>
-                  </div>
+                  <p style={{ margin: '0 0 0.75rem', whiteSpace: 'pre-wrap' }}>{m.body}</p>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => void deleteMentorMessage(m.id)}
+                  >
+                    Delete
+                  </button>
                 </article>
               ))}
             </div>

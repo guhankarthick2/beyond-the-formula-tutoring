@@ -172,10 +172,10 @@ export function HomePage() {
             </p>
           </article>
           <article className="card">
-            <h3>Session homework</h3>
+            <h3>Open questions</h3>
             <p>
-              Enrolled students get assignments tied to their mentor&apos;s sessions — with feedback
-              and reminders.
+              Free-form help by subject (PreCal, SAT, and more). Mentors answer when they can — text
+              only, no photo uploads.
             </p>
           </article>
         </div>

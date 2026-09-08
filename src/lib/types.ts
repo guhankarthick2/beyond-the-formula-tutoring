@@ -65,7 +65,8 @@ export interface SessionRequest {
 export interface StuckQuestion {
   id: string
   author_id: string
-  topic_id: string
+  topic_id: string | null
+  subject_slug: string
   title: string
   body: string
   status: QuestionStatus
@@ -115,7 +116,9 @@ export interface MentorMessage {
   student_id: string
   body: string
   created_at: string
+  dismissed_at: string | null
   tutor?: Pick<Profile, 'display_name'> | null
+  student?: Pick<Profile, 'display_name'> | null
 }
 
 export interface RosterStudent {

@@ -4,6 +4,7 @@ import { PageBack } from '@/components/PageBack'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/hooks'
+import { useMessageInbox } from '@/lib/messageInbox'
 import { formatSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { supabase } from '@/lib/supabase'
@@ -69,12 +70,14 @@ function pastSessionStatus(status: string) {
 export function StudentMySessionsPage() {
   usePageView('/students/my-sessions')
   const { user, profile, isApprovedTutor } = useAuth()
+  const { refresh: refreshInbox } = useMessageInbox()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [tutoredSlots, setTutoredSlots] = useState<AvailabilitySlot[]>([])
   const [homework, setHomework] = useState<HomeworkRow[]>([])
   const [messages, setMessages] = useState<MentorMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cancelBusyId, setCancelBusyId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!user) return
@@ -105,6 +108,7 @@ export function StudentMySessionsPage() {
       .from('mentor_messages')
       .select('*, tutor:profiles!mentor_messages_tutor_id_fkey(display_name)')
       .eq('student_id', user.id)
+      .is('dismissed_at', null)
       .order('created_at', { ascending: false })
       .limit(20)
 
@@ -145,6 +149,36 @@ export function StudentMySessionsPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  async function dismissMessage(id: string) {
+    setError(null)
+    const { error: err } = await supabase.rpc('dismiss_mentor_message', { p_message_id: id })
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setMessages((prev) => prev.filter((m) => m.id !== id))
+    await refreshInbox()
+  }
+
+  async function cancelEnrollment(slotId: string) {
+    if (
+      !confirm(
+        'Cancel your enrollment in this upcoming session? The seat will open for another student if no one else is enrolled.',
+      )
+    ) {
+      return
+    }
+    setCancelBusyId(slotId)
+    setError(null)
+    const { error: err } = await supabase.rpc('cancel_enrollment', { p_slot_id: slotId })
+    setCancelBusyId(null)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    await load()
+  }
 
   async function toggleComplete(hw: HomeworkRow) {
     if (!user) return
@@ -228,7 +262,7 @@ export function StudentMySessionsPage() {
           <div className="card stack" style={{ marginTop: '1.25rem' }}>
             <h2 style={{ margin: 0 }}>Sessions I&apos;m attending</h2>
             <p className="muted" style={{ margin: 0 }}>
-              Sessions you enrolled in as a student.
+              Sessions you enrolled in as a student. You can cancel upcoming enrollments anytime.
             </p>
             {upcomingAttending.length === 0 && pastAttending.length === 0 ? (
               <div className="empty">
@@ -246,6 +280,15 @@ export function StudentMySessionsPage() {
                             mentorLabel: b.availability_slots?.profiles?.display_name ?? 'Mentor',
                             past: false,
                           })}
+                          {' · '}
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={cancelBusyId === b.slot_id}
+                            onClick={() => void cancelEnrollment(b.slot_id)}
+                          >
+                            {cancelBusyId === b.slot_id ? 'Cancelling…' : 'Cancel enrollment'}
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -315,6 +358,12 @@ export function StudentMySessionsPage() {
                           {slotLine(s, { past: false })}
                           {' · '}
                           <StatusPill status={s.status} />
+                          {s.status !== 'cancelled' && (
+                            <>
+                              {' · '}
+                              <Link to="/mentors/dashboard">Manage / cancel</Link>
+                            </>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -375,16 +424,33 @@ export function StudentMySessionsPage() {
           {messages.length > 0 && (
             <div className="section">
               <h2>Messages from your mentor</h2>
+              <p className="muted" style={{ margin: '0 0 0.75rem' }}>
+                New notes stay here until you dismiss them.
+              </p>
               <div className="stack">
                 {messages.map((m) => (
                   <div key={m.id} className="callout callout-success">
                     <strong>{m.tutor?.display_name ?? 'Mentor'}:</strong> {m.body}
-                    <span
-                      className="muted"
-                      style={{ display: 'block', fontSize: '0.85rem', marginTop: '0.25rem' }}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        marginTop: '0.5rem',
+                      }}
                     >
-                      {formatDate(m.created_at.slice(0, 10))}
-                    </span>
+                      <span className="muted" style={{ fontSize: '0.85rem' }}>
+                        {formatDate(m.created_at.slice(0, 10))}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => void dismissMessage(m.id)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
