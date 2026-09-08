@@ -98,7 +98,7 @@ export function StudentSubjectPage() {
   const nextSession = upcoming[0]?.availability_slots
   const schedulePath = `/students/${subject.slug}/schedule`
   const resourcesPath = `/students/resources/${subject.slug}`
-  const recordingsPath = `/students/${subject.slug}/recordings`
+  const pastPath = `/students/${subject.slug}/past`
   const testPath = `/students/${subject.slug}/tests/unit-1`
 
   return (
@@ -118,17 +118,20 @@ export function StudentSubjectPage() {
 
       <div className="card-grid cols-2" style={{ marginTop: '1.25rem' }}>
         <article className="card card-accent card-student stack">
-          <h3>Enroll in a session</h3>
+          <h3>Enroll in a live session</h3>
           <p>See upcoming {subject.shortName} sessions with mentors and enroll when you are ready.</p>
           <Link className="btn btn-primary" to={schedulePath}>
             View schedule
           </Link>
         </article>
         <article className="card stack">
-          <h3>Session Recordings</h3>
-          <p>Watch recorded {subject.shortName} lessons by topic — open the video for that topic.</p>
-          <Link className="btn btn-secondary" to={recordingsPath}>
-            Watch recordings
+          <h3>Past sessions</h3>
+          <p>
+            Browse completed sessions and mentors. Sign in and enroll to unlock recordings and other
+            artifacts.
+          </p>
+          <Link className="btn btn-secondary" to={pastPath}>
+            Browse past sessions
           </Link>
         </article>
         <article className="card stack">

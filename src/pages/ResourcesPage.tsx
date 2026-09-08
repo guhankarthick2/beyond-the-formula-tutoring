@@ -22,7 +22,7 @@ export function ResourcesPage() {
     return <Navigate to="/students/resources" replace />
   }
 
-  const recordingsPath = subject ? `/students/${subject.slug}/recordings` : ''
+  const pastPath = subject ? `/students/${subject.slug}/past` : ''
   const testPath = subject ? `/students/${subject.slug}/tests/unit-1` : ''
   const materials = subject?.resources.filter((r) => r.kind === 'notes' || r.kind === 'link') ?? []
 
@@ -41,8 +41,8 @@ export function ResourcesPage() {
         <h1 className="page-title">Free Resources</h1>
         <p className="lead" style={{ margin: 0, maxWidth: '42rem' }}>
           {subject
-            ? `Open the same ${subject.shortName} recordings, materials, and tests from the student hub.`
-            : 'Choose a subject. Recordings, materials, and tests are the same pages as the student hub — no extra copies.'}
+            ? `Past sessions, materials, and tests for ${subject.shortName} — same pages as the student hub.`
+            : 'Choose a subject. Past sessions, materials, and tests match the student hub.'}
         </p>
       </div>
 
@@ -50,10 +50,13 @@ export function ResourcesPage() {
         <div id="subject-options" className="stack" style={{ marginTop: '1.25rem' }}>
           <div className="card-grid cols-2">
             <article className="card stack">
-              <h3>Session Recordings</h3>
-              <p>Topic-by-topic session recordings — the same list as the {subject.shortName} hub.</p>
-              <Link className="btn btn-secondary" to={recordingsPath}>
-                Open recordings
+              <h3>Past sessions</h3>
+              <p>
+                Browse completed sessions and mentors. Sign in and enroll to unlock recordings and
+                other artifacts.
+              </p>
+              <Link className="btn btn-secondary" to={pastPath}>
+                Browse past sessions
               </Link>
             </article>
             <article className="card stack">

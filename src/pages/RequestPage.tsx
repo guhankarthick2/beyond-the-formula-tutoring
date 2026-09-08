@@ -47,8 +47,8 @@ export function RequestPage() {
       <h1 className="page-title">Request a session</h1>
       <p className="lead">
         No open slot for the date you need? Request a curated topic. Multiple students can request
-        the same topic on different dates. Even if recordings exist, your one-on-one request will
-        still be listed for tutors.
+        the same topic on different dates. Even if a past session recording exists, your one-on-one
+        request will still be listed for tutors.
       </p>
 
       {!user && (
@@ -72,7 +72,7 @@ export function RequestPage() {
 
         {selected && (
           <div className="alert">
-            Related recordings:{' '}
+            Related past sessions:{' '}
             {selected.youtube_url ? (
               <a href={selected.youtube_url} rel="noopener noreferrer">
                 Topic video
@@ -82,7 +82,9 @@ export function RequestPage() {
                 Channel playlist
               </a>
             )}
-            . Watch if you can — you can still request live help.
+            . Prefer browsing on the site? Open{' '}
+            <Link to="/students/precal/past">past sessions</Link> — sign in to enroll and unlock
+            recordings. You can still request live help.
           </div>
         )}
 

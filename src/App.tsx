@@ -13,7 +13,7 @@ import { RequestPage } from '@/pages/RequestPage'
 import { ResourcesPage } from '@/pages/ResourcesPage'
 import { ScheduleRedirect, SessionsPage } from '@/pages/SessionsPage'
 import { StuckDetailPage, StuckListPage } from '@/pages/StuckPage'
-import { RecordingsPage } from '@/pages/RecordingsPage'
+import { PastSessionsPage, RecordingsRedirect } from '@/pages/PastSessionsPage'
 import { StudentHubPage, StudentSubjectPage } from '@/pages/StudentHubPage'
 import { StudentMySessionsPage } from '@/pages/StudentMySessionsPage'
 import { TermsOfServicePage } from '@/pages/TermsOfServicePage'
@@ -36,7 +36,8 @@ export default function App() {
               <Route path="/students/precal/tests/unit-1" element={<Unit1TestPage />} />
               <Route path="/students/:subjectSlug" element={<StudentSubjectPage />} />
               <Route path="/students/:subjectSlug/schedule" element={<SessionsPage />} />
-              <Route path="/students/:subjectSlug/recordings" element={<RecordingsPage />} />
+              <Route path="/students/:subjectSlug/past" element={<PastSessionsPage />} />
+              <Route path="/students/:subjectSlug/recordings" element={<RecordingsRedirect />} />
               <Route path="/mentors" element={<MentorHomePage />} />
               <Route path="/mentors/dashboard" element={<MentorDashboardPage />} />
               <Route path="/auth" element={<AuthPage />} />

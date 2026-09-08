@@ -11,6 +11,12 @@ import { StatusPill } from '@/components/StatusPill'
 
 type SessionMode = 'upcoming' | 'past'
 
+function displaySlotStatus(status: string, sessionDate: string, today: string) {
+  if (status === 'cancelled') return 'cancelled'
+  if (sessionDate <= today) return 'completed'
+  return status
+}
+
 export function MentorDashboardPage() {
   usePageView('/mentors/dashboard')
   const { user, profile, isApprovedTutor } = useAuth()
@@ -139,7 +145,7 @@ export function MentorDashboardPage() {
         (s) => s.id === excludeSlotId && meetingUrlsConflict(url, s.meeting_url),
       )
       if (!stillMine) {
-        return 'That recording is already linked to another session. Ask an admin to remove the existing attribution if it should be reassigned.'
+        return 'That recording is already linked to another session. Ask an admin to remove the existing past session if it should be reassigned.'
       }
     }
     return null
@@ -168,13 +174,13 @@ export function MentorDashboardPage() {
     if (err) {
       setError(
         err.message.includes('already attributed')
-          ? 'That recording or meeting link is already attributed to another session.'
+          ? 'That recording or meeting link is already used on another past session.'
           : err.message,
       )
     } else {
       setOk(
         isPast
-          ? 'Past session saved — it counts toward your tutoring history.'
+          ? 'Past session saved — students can enroll to unlock the recording.'
           : 'Session published to the public schedule.',
       )
       setTimeNote('')
@@ -202,7 +208,7 @@ export function MentorDashboardPage() {
     if (err) {
       setError(
         err.message.includes('already attributed')
-          ? 'That recording or meeting link is already attributed to another session.'
+          ? 'That recording or meeting link is already used on another past session.'
           : err.message,
       )
     } else {
@@ -293,8 +299,8 @@ export function MentorDashboardPage() {
         </div>
         <h1 className="page-title">Mentor dashboard</h1>
         <p className="lead" style={{ margin: 0 }}>
-          Hello, {profile?.display_name}. Manage sessions, claim recordings you taught, homework, and
-          outreach.
+          Hello, {profile?.display_name}. Manage live and past sessions, recordings for enrolled
+          students, homework, and outreach.
         </p>
       </div>
 
@@ -362,7 +368,8 @@ export function MentorDashboardPage() {
       <div className="card stack" style={{ marginTop: '1.25rem' }}>
         <h2 style={{ margin: 0 }}>Create session</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Publish an upcoming live session, or log a past session you taught and attach its recording.
+          Publish an upcoming live session, or add a past session so students can browse it and enroll
+          to unlock the recording and other artifacts.
         </p>
         <div className="split-actions" role="group" aria-label="Session type">
           <button
@@ -377,7 +384,7 @@ export function MentorDashboardPage() {
             className={`btn ${sessionMode === 'past' ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setSessionMode('past')}
           >
-            Past + recording
+            Past session
           </button>
         </div>
         <form className="form" onSubmit={(e) => void addSession(e)}>
@@ -415,8 +422,8 @@ export function MentorDashboardPage() {
               <select value={recordingKey} onChange={(e) => pickRecording(e.target.value)}>
                 <option value="">
                   {availableRecordings.length === 0
-                    ? 'All catalog recordings are already attributed'
-                    : 'Paste a URL below, or pick one…'}
+                    ? 'All catalog recordings are already on a past session'
+                      : 'Paste a URL below, or pick one…'}
                 </option>
                 {availableRecordings.map((r) => (
                   <option key={`${r.subjectSlug}:${r.slug}`} value={`${r.subjectSlug}:${r.slug}`}>
@@ -463,7 +470,8 @@ export function MentorDashboardPage() {
               <option value="">Select session</option>
               {bookedSlots.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {formatDate(s.session_date)} — {s.topics?.name ?? 'Any topic'} ({s.status})
+                  {formatDate(s.session_date)} — {s.topics?.name ?? 'Any topic'} (
+                  {displaySlotStatus(s.status, s.session_date, today)})
                 </option>
               ))}
             </select>
@@ -489,8 +497,8 @@ export function MentorDashboardPage() {
       <div className="card stack" style={{ marginTop: '1.25rem' }}>
         <h2 style={{ margin: 0 }}>Your sessions</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Attach or update a recording/meeting link anytime. Mark past open sessions as completed when
-          done.
+          Attach or update a recording anytime. Students who enroll in that past session can unlock it.
+          Mark past open sessions as completed when done.
         </p>
         {mySlots.length === 0 ? (
           <div className="empty">No sessions yet.</div>
@@ -512,7 +520,7 @@ export function MentorDashboardPage() {
                     <td>{formatDate(s.session_date)}</td>
                     <td>{s.topics?.name ?? 'Any topic'}</td>
                     <td>
-                      <StatusPill status={s.status} />
+                      <StatusPill status={displaySlotStatus(s.status, s.session_date, today)} />
                     </td>
                     <td>
                       <input

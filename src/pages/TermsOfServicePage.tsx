@@ -65,7 +65,7 @@ export function TermsOfServicePage() {
 
       <h2>5. Educational content and sessions</h2>
       <ul>
-        <li>Session availability, recordings, and resources may change without notice.</li>
+        <li>Session availability, past-session recordings, and resources may change without notice.</li>
         <li>Volunteer mentors provide good-faith help; we do not guarantee grades, scores, or outcomes.</li>
         <li>Live sessions may use third-party meeting tools; those tools have their own terms.</li>
       </ul>

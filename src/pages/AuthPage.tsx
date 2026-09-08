@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { GitHubMark, GoogleMark } from '@/components/AuthProviderMarks'
 import { useAuth } from '@/lib/auth'
 
 type AuthMode = 'signin' | 'register' | 'forgot' | 'recovery'
+
+function safeNextPath(raw: string | null): string | null {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return null
+  return raw
+}
 
 export function AuthPage() {
   const {
@@ -21,6 +26,7 @@ export function AuthPage() {
     updateDisplayName,
   } = useAuth()
 
+  const [searchParams] = useSearchParams()
   const [mode, setMode] = useState<AuthMode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -31,6 +37,33 @@ export function AuthPage() {
   const [busy, setBusy] = useState(false)
   const [oauthBusy, setOauthBusy] = useState<'google' | 'github' | null>(null)
   const [nameBusy, setNameBusy] = useState(false)
+
+  const nextPath = useMemo(() => {
+    const fromQuery = safeNextPath(searchParams.get('next'))
+    if (fromQuery) {
+      try {
+        sessionStorage.setItem('auth_next', fromQuery)
+      } catch {
+        /* ignore */
+      }
+      return fromQuery
+    }
+    try {
+      return safeNextPath(sessionStorage.getItem('auth_next'))
+    } catch {
+      return null
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    if (user && nextPath && mode !== 'recovery') {
+      try {
+        sessionStorage.removeItem('auth_next')
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [user, nextPath, mode])
 
   useEffect(() => {
     if (passwordRecovery) {
@@ -165,6 +198,10 @@ export function AuthPage() {
   }
 
   if (user && mode !== 'recovery') {
+    if (nextPath) {
+      return <Navigate to={nextPath} replace />
+    }
+
     const needsName = !profile?.display_name || profile.display_name === 'Learner'
 
     return (

@@ -41,13 +41,19 @@ export function AdminPage() {
   const [attrRecordingKey, setAttrRecordingKey] = useState('')
   const [attrUrl, setAttrUrl] = useState('')
   const [attributedSlots, setAttributedSlots] = useState<AvailabilitySlot[]>([])
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null)
 
   const availableRecordings = useMemo(
     () =>
       recordings.filter(
-        (r) => !r.href || !attributedSlots.some((s) => meetingUrlsConflict(r.href!, s.meeting_url)),
+        (r) =>
+          !r.href ||
+          !attributedSlots.some(
+            (s) =>
+              s.id !== editingSlotId && meetingUrlsConflict(r.href!, s.meeting_url),
+          ),
       ),
-    [recordings, attributedSlots],
+    [recordings, attributedSlots, editingSlotId],
   )
 
   const [adminSearch, setAdminSearch] = useState('')
@@ -368,38 +374,76 @@ export function AdminPage() {
     if (!selectedMentorId || !attrDate) return
     const url = attrUrl.trim()
     if (url) {
-      const dup = attributedSlots.find((s) => meetingUrlsConflict(url, s.meeting_url))
+      const dup = attributedSlots.find(
+        (s) => s.id !== editingSlotId && meetingUrlsConflict(url, s.meeting_url),
+      )
       if (dup) {
         setError(
-          `That recording is already attributed to ${dup.profiles?.display_name ?? 'a mentor'} on ${formatDate(dup.session_date)}. Remove it first to reassign.`,
+          `That recording is already used on ${dup.profiles?.display_name ?? 'a mentor'}'s past session on ${formatDate(dup.session_date)}. Remove that session first to reuse the link.`,
         )
         return
       }
     }
-    const { error: err } = await supabase.from('availability_slots').insert({
+
+    const payload = {
       tutor_id: selectedMentorId,
       topic_id: attrAnyTopic ? null : attrTopicId || null,
       session_date: attrDate,
       time_note: attrTimeNote.trim(),
       meeting_url: url,
-      status: 'booked',
-    })
+      status: 'booked' as const,
+    }
+
+    const { error: err } = editingSlotId
+      ? await supabase.from('availability_slots').update(payload).eq('id', editingSlotId)
+      : await supabase.from('availability_slots').insert(payload)
+
     if (err) {
       setError(
         err.message.includes('already attributed')
-          ? 'That recording or meeting link is already attributed to another session.'
+          ? 'That recording or meeting link is already used on another past session.'
           : err.message,
       )
     } else {
-      flash(`Session attributed to ${selectedMentor?.display_name ?? 'mentor'}.`)
-      setAttrDate('')
-      setAttrTimeNote('')
-      setAttrUrl('')
-      setAttrRecordingKey('')
-      setAttrTopicId('')
-      setAttrAnyTopic(true)
+      flash(
+        editingSlotId
+          ? `Past session updated for ${selectedMentor?.display_name ?? 'mentor'}.`
+          : `Past session added for ${selectedMentor?.display_name ?? 'mentor'}.`,
+      )
+      resetPastSessionForm()
       await load()
     }
+  }
+
+  function resetPastSessionForm() {
+    setEditingSlotId(null)
+    setSelectedMentorId('')
+    setMentorQuery('')
+    setAttrDate('')
+    setAttrTimeNote('')
+    setAttrUrl('')
+    setAttrRecordingKey('')
+    setAttrTopicId('')
+    setAttrAnyTopic(true)
+  }
+
+  function startEditPastSession(slot: AvailabilitySlot) {
+    setError(null)
+    setEditingSlotId(slot.id)
+    setSelectedMentorId(slot.tutor_id)
+    setMentorQuery(slot.profiles?.display_name ?? '')
+    setAttrDate(slot.session_date)
+    setAttrTimeNote(slot.time_note ?? '')
+    setAttrUrl(slot.meeting_url ?? '')
+    setAttrRecordingKey('')
+    if (slot.topic_id) {
+      setAttrAnyTopic(false)
+      setAttrTopicId(slot.topic_id)
+    } else {
+      setAttrAnyTopic(true)
+      setAttrTopicId('')
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function deleteAttributedSession(slot: AvailabilitySlot) {
@@ -407,7 +451,7 @@ export function AdminPage() {
     const label = slot.time_note || slot.topics?.name || 'session'
     if (
       !confirm(
-        `Remove attribution for ${mentor} on ${formatDate(slot.session_date)} (${label})?\n\nThis only removes that mentor’s credit for this session. The YouTube video itself is unchanged. If any students had enrolled in this exact slot, those enrollments are removed too.`,
+        `Remove past session for ${mentor} on ${formatDate(slot.session_date)} (${label})?\n\nThis removes the session from the public past-sessions list and clears that mentor’s credit. The YouTube video itself is unchanged. Student enrollments on this slot are removed too.`,
       )
     ) {
       return
@@ -415,7 +459,8 @@ export function AdminPage() {
     const { error: err } = await supabase.from('availability_slots').delete().eq('id', slot.id)
     if (err) setError(err.message)
     else {
-      flash('Attribution removed.')
+      if (editingSlotId === slot.id) resetPastSessionForm()
+      flash('Past session removed.')
       await load()
     }
   }
@@ -455,7 +500,7 @@ export function AdminPage() {
     <section className="section">
       <h1 className="page-title">Admin</h1>
       <p className="lead">
-        Approve volunteers, attribute completed sessions to mentors, moderate sign-ups and requests, and
+        Approve volunteers, publish past sessions for mentors, moderate sign-ups and requests, and
         clear old stuck points or session data. Admin does not imply mentoring — enable that for yourself
         under Tutor apps if you want it. In-app chat is never stored.
       </p>
@@ -829,10 +874,13 @@ export function AdminPage() {
       {tab === 'sessions' && (
         <div className="stack">
           <div className="card stack">
-            <h2 style={{ margin: 0 }}>Attribute a completed session</h2>
+            <h2 style={{ margin: 0 }}>
+              {editingSlotId ? 'Edit past session' : 'Add a past session'}
+            </h2>
             <p className="muted" style={{ margin: 0 }}>
-              Assign a past session (and optional recording link) to any approved mentor. Mentors can also
-              claim their own recordings from the mentor dashboard.
+              {editingSlotId
+                ? 'Fix date, mentor, topic, label, or recording for this published past session.'
+                : 'Publish a completed session (and optional recording) under any approved mentor. Students browse it publicly and sign in to enroll for the recording and other artifacts. Mentors can also add their own past sessions from the mentor dashboard.'}
             </p>
             <form className="form" onSubmit={(e) => void attributeSession(e)}>
               <label>
@@ -916,11 +964,11 @@ export function AdminPage() {
                 </label>
               )}
               <label>
-                Catalog recording (optional)
+                Recording picker (optional)
                 <select value={attrRecordingKey} onChange={(e) => pickRecording(e.target.value)}>
                   <option value="">
                     {availableRecordings.length === 0
-                      ? 'All catalog recordings are already attributed'
+                      ? 'All catalog recordings are already on a past session'
                       : 'Paste a URL below, or pick one…'}
                   </option>
                   {availableRecordings.map((r) => (
@@ -948,20 +996,28 @@ export function AdminPage() {
                   placeholder="https://…"
                 />
               </label>
-              <button className="btn btn-primary" type="submit" disabled={!selectedMentorId}>
-                Attribute session
-              </button>
+              <div className="split-actions">
+                <button className="btn btn-primary" type="submit" disabled={!selectedMentorId}>
+                  {editingSlotId ? 'Save changes' : 'Add past session'}
+                </button>
+                {editingSlotId && (
+                  <button type="button" className="btn btn-ghost" onClick={resetPastSessionForm}>
+                    Cancel edit
+                  </button>
+                )}
+              </div>
             </form>
           </div>
 
           <div className="card stack">
-            <h2 style={{ margin: 0 }}>Attributed / completed sessions</h2>
+            <h2 style={{ margin: 0 }}>Published past sessions</h2>
             <p className="muted" style={{ margin: 0 }}>
-              Each recording can only be attributed once. Remove attribution to clear that mentor’s
-              credit for the session (the video stays on YouTube / in the catalog).
+              Each recording URL can only be used once. Edit to fix date, topic, or label. Removing a
+              session clears that mentor’s credit and student enrollments for that slot (the video stays
+              on YouTube).
             </p>
             {attributedSlots.length === 0 ? (
-              <div className="empty">No booked sessions yet.</div>
+              <div className="empty">No past sessions yet.</div>
             ) : (
               <div className="table-wrap">
                 <table>
@@ -990,13 +1046,22 @@ export function AdminPage() {
                           )}
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn btn-danger"
-                            onClick={() => void deleteAttributedSession(s)}
-                          >
-                            Remove attribution
-                          </button>
+                          <div className="split-actions">
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => startEditPastSession(s)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={() => void deleteAttributedSession(s)}
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

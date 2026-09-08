@@ -697,6 +697,11 @@ th {
   margin-top: 0.75rem;
 }
 
+td .split-actions {
+  margin-top: 0;
+  align-items: center;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;

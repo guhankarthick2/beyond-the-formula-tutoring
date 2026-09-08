@@ -176,7 +176,7 @@ export function resourcesByKind(subject: Subject): Record<ResourceKind, SubjectR
 
 export type CatalogRecording = SubjectRecording & { subjectSlug: string; subjectName: string }
 
-/** Flat list of subject recordings that have a video URL (for session attribution). */
+/** Flat list of subject recordings that have a video URL (internal picker for past sessions). */
 export function catalogRecordings(): CatalogRecording[] {
   const out: CatalogRecording[] = []
   for (const s of SUBJECTS) {

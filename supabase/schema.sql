@@ -46,9 +46,10 @@ create table public.availability_slots (
 
 create table public.bookings (
   id uuid primary key default gen_random_uuid(),
-  slot_id uuid not null unique references public.availability_slots (id) on delete cascade,
+  slot_id uuid not null references public.availability_slots (id) on delete cascade,
   student_id uuid not null references public.profiles (id) on delete cascade,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (slot_id, student_id)
 );
 
 create table public.session_requests (
@@ -305,6 +306,14 @@ create policy "topics_admin_write"
   with check (public.is_admin());
 
 -- Availability slots
+-- Public: upcoming open schedule + past booked sessions (metadata; enroll to unlock artifacts)
+create policy "slots_select_public_open"
+  on public.availability_slots for select
+  using (
+    (status = 'open' and session_date >= current_date)
+    or (status = 'booked' and session_date < current_date)
+  );
+
 create policy "slots_select_authenticated"
   on public.availability_slots for select to authenticated
   using (
@@ -312,6 +321,7 @@ create policy "slots_select_authenticated"
     or tutor_id = auth.uid()
     or public.is_admin()
     or public.user_booked_slot(id)
+    or (status = 'booked' and session_date < current_date)
   );
 
 create policy "slots_insert_tutor"
@@ -595,7 +605,7 @@ $$;
 
 grant execute on function public.admin_set_role(uuid, public.user_role) to authenticated;
 
--- Atomic book slot
+-- Atomic book slot: exclusive for open upcoming; multi-enroll for past/booked sessions
 create or replace function public.book_slot(p_slot_id uuid)
 returns uuid
 language plpgsql
@@ -604,24 +614,61 @@ set search_path = public
 as $$
 declare
   booking_id uuid;
+  slot_status public.slot_status;
+  slot_date date;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
   end if;
 
-  update public.availability_slots
-  set status = 'booked'
-  where id = p_slot_id and status = 'open';
+  select status, session_date
+  into slot_status, slot_date
+  from public.availability_slots
+  where id = p_slot_id
+  for update;
 
-  if not found then
-    raise exception 'Slot unavailable';
+  if slot_status is null then
+    raise exception 'Session not found';
   end if;
 
-  insert into public.bookings (slot_id, student_id)
-  values (p_slot_id, auth.uid())
-  returning id into booking_id;
+  if exists (
+    select 1 from public.bookings
+    where slot_id = p_slot_id and student_id = auth.uid()
+  ) then
+    raise exception 'Already enrolled in this session';
+  end if;
 
-  return booking_id;
+  if slot_status = 'open' and slot_date >= current_date then
+    update public.availability_slots
+    set status = 'booked'
+    where id = p_slot_id and status = 'open';
+
+    if not found then
+      raise exception 'Slot unavailable';
+    end if;
+
+    insert into public.bookings (slot_id, student_id)
+    values (p_slot_id, auth.uid())
+    returning id into booking_id;
+
+    return booking_id;
+  end if;
+
+  if slot_status = 'booked' or slot_date < current_date then
+    if slot_status = 'open' then
+      update public.availability_slots
+      set status = 'booked'
+      where id = p_slot_id;
+    end if;
+
+    insert into public.bookings (slot_id, student_id)
+    values (p_slot_id, auth.uid())
+    returning id into booking_id;
+
+    return booking_id;
+  end if;
+
+  raise exception 'Session unavailable';
 end;
 $$;
 

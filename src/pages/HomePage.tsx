@@ -64,9 +64,9 @@ export function HomePage() {
         <p>
           <strong>Beyond The Formula</strong> is a free nonprofit tutoring app for math and STEM.
           Our purpose is to help students build real understanding through live sessions with
-          volunteer mentors, open resources, practice tests, recordings, and a supportive community —
-          not just memorizing formulas. Anyone can browse the student hub and free resources without
-          signing in. Sign-in is optional and only needed to enroll in sessions or mentor.
+          volunteer mentors, open practice resources, past sessions (sign in to unlock recordings),
+          and a supportive community — not just memorizing formulas. Anyone can browse the student
+          hub without signing in. Sign in to enroll in live or past sessions.
         </p>
         <div className="btn-group">
           <Link className="btn btn-primary" to="/students">
@@ -165,9 +165,10 @@ export function HomePage() {
             </p>
           </article>
           <article className="card">
-            <h3>Open resources</h3>
+            <h3>Past sessions</h3>
             <p>
-              Recordings, YouTube lessons, and practice tests — free for everyone, enrolled or not.
+              Browse completed classes and mentors for free. Sign in and enroll to unlock recordings
+              and other session artifacts.
             </p>
           </article>
           <article className="card">
@@ -184,15 +185,15 @@ export function HomePage() {
         <div className="callout callout-brand">
           <h2 style={{ margin: '0 0 0.5rem' }}>Ready to learn beyond the formula?</h2>
           <p className="muted" style={{ margin: 0 }}>
-            The student hub is open to all. Sign in only when you want to enroll or track your
-            sessions.
+            The student hub is open to all. Sign in when you want to enroll in a live or past session
+            and unlock recordings or homework.
           </p>
           <div className="btn-group">
             <Link className="btn btn-primary" to="/students/precal/schedule">
-              Browse sessions
+              Browse live sessions
             </Link>
-            <Link className="btn btn-secondary" to="/students/resources">
-              Free Resources
+            <Link className="btn btn-secondary" to="/students/precal/past">
+              Browse past sessions
             </Link>
           </div>
         </div>
