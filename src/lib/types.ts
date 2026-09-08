@@ -85,6 +85,17 @@ export interface StuckAnswer {
   profiles?: Pick<Profile, 'display_name'> | null
 }
 
+export interface QuestionReport {
+  id: string
+  question_id: string
+  reporter_id: string
+  reason: string
+  created_at: string
+  resolved_at: string | null
+  profiles?: Pick<Profile, 'display_name'> | null
+  stuck_questions?: Pick<StuckQuestion, 'id' | 'title' | 'subject_slug' | 'body' | 'status'> | null
+}
+
 export interface ChatMessage {
   id: string
   senderId: string

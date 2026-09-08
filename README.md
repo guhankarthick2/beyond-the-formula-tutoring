@@ -128,8 +128,8 @@ If you already ran an older `schema.sql`, also run newer files under `supabase/m
 | Book | Students book open slots |
 | Request | Students request topic + date even if recordings exist; tutors claim & propose |
 | Chat | Supabase Realtime broadcast — **not stored** |
-| Open questions | Free-form Q&A by subject (`/students/:slug/questions`); optional email notify on reply |
-| Admin | Approve mentors, moderate sessions/messages, hard-delete Q&A threads and answers |
+| Open questions | Free-form Q&A by subject; mentors get open-question alerts; close when done; report to admin |
+| Admin | Approve mentors, moderate sessions/messages, review reports, hard-delete Q&A threads and answers |
 
 ## Q&A email notify (optional)
 
@@ -137,14 +137,15 @@ Replies can optionally email the other party **without exposing addresses**. Dep
 
 ```bash
 supabase functions deploy notify-qa-reply
+supabase functions deploy notify-question-report
 supabase secrets set RESEND_API_KEY=re_xxx
 supabase secrets set NOTIFY_FROM_EMAIL="Beyond The Formula <noreply@beyondtheformula.org>"
 supabase secrets set SITE_URL=https://beyondtheformula.org
 ```
 
-Uses [Resend](https://resend.com). If `RESEND_API_KEY` is missing, the in-app reply still posts; the UI explains that email notify is unavailable.
+Uses [Resend](https://resend.com). If `RESEND_API_KEY` is missing, the in-app reply/report still saves; the UI explains that email notify is unavailable.
 
-Also run migration `015_subject_questions.sql` so questions store `subject_slug` and allow null `topic_id`.
+Also run migrations `015_subject_questions.sql`, `016_question_alerts_reports.sql`, and `017_question_reports_realtime.sql` so questions store `subject_slug`, mentors can dismiss open-question alerts, threads can be closed by asker/mentor/admin, reports are stored for Admin → Questions, and admins get a live in-app badge when something is reported.
 
 ## Privacy
 

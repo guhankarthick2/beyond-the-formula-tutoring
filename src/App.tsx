@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { AuthProvider } from '@/lib/auth'
 import { MessageInboxProvider } from '@/lib/messageInbox'
+import { OpenQuestionsInboxProvider } from '@/lib/openQuestionsInbox'
+import { AdminReportsInboxProvider } from '@/lib/adminReportsInbox'
 import { SubjectProvider } from '@/lib/subject'
 import { AdminPage } from '@/pages/AdminPage'
 import { AuthPage } from '@/pages/AuthPage'
@@ -29,6 +31,8 @@ export default function App() {
   return (
     <AuthProvider>
       <MessageInboxProvider>
+        <OpenQuestionsInboxProvider>
+        <AdminReportsInboxProvider>
         <SubjectProvider>
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
             <Layout>
@@ -61,9 +65,11 @@ export default function App() {
               <Route path="/admin" element={<AdminPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </Layout>
-        </BrowserRouter>
+            </Layout>
+          </BrowserRouter>
         </SubjectProvider>
+        </AdminReportsInboxProvider>
+        </OpenQuestionsInboxProvider>
       </MessageInboxProvider>
     </AuthProvider>
   )

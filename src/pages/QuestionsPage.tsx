@@ -4,6 +4,7 @@ import { PageBack } from '@/components/PageBack'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
+import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
 import { getSubject } from '@/lib/subjects'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import { usePageView } from '@/lib/stats'
@@ -29,7 +30,6 @@ async function notifyQaReply(payload: {
       : null
 
   if (error) {
-    // Prefer JSON body from the function when present (non-2xx still returns a payload).
     if (bodyError) return { error: bodyError }
     const ctx = (error as { context?: Response }).context
     if (ctx && typeof ctx.json === 'function') {
@@ -43,6 +43,44 @@ async function notifyQaReply(payload: {
     return {
       error:
         'Email notify failed. Check Edge Function logs (and RESEND_API_KEY / FROM address). Your reply was still posted.',
+    }
+  }
+
+  if (bodyError) return { error: bodyError }
+  return { error: null }
+}
+
+async function notifyQuestionReport(payload: {
+  reportId: string
+  questionId: string
+}): Promise<{ error: string | null }> {
+  if (!isSupabaseConfigured) return { error: 'Report email unavailable.' }
+  const { data, error } = await supabase.functions.invoke('notify-question-report', {
+    body: {
+      report_id: payload.reportId,
+      question_id: payload.questionId,
+    },
+  })
+
+  const bodyError =
+    data && typeof data === 'object' && 'error' in data
+      ? String((data as { error: string }).error)
+      : null
+
+  if (error) {
+    if (bodyError) return { error: bodyError }
+    const ctx = (error as { context?: Response }).context
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const parsed = (await ctx.json()) as { error?: string }
+        if (parsed?.error) return { error: parsed.error }
+      } catch {
+        /* ignore */
+      }
+    }
+    return {
+      error:
+        'Report was saved, but emailing admins failed. Admins can still see it under Admin → Questions.',
     }
   }
 
@@ -128,7 +166,8 @@ export function QuestionsListPage() {
         <h1 className="page-title">Open questions</h1>
         <p className="lead" style={{ margin: 0, maxWidth: '42rem' }}>
           Free-form help for {subject.shortName}. Post a question; any approved mentor (or peer) can
-          answer when they can. Text only — no photo uploads.
+          answer when they can. Close the thread when you have a satisfying answer. Text only — no
+          photo uploads.
         </p>
       </div>
 
@@ -233,11 +272,14 @@ export function QuestionsListPage() {
 export function QuestionsDetailPage() {
   const { subjectSlug, id } = useParams<{ subjectSlug: string; id: string }>()
   const subject = getSubject(subjectSlug)
-  const { user, isApprovedTutor } = useAuth()
+  const { user, isApprovedTutor, isAdmin } = useAuth()
+  const { dismiss, refresh: refreshOpenAlerts } = useOpenQuestionsInbox()
   const [question, setQuestion] = useState<StuckQuestion | null>(null)
   const [answers, setAnswers] = useState<StuckAnswer[]>([])
   const [body, setBody] = useState('')
   const [emailNotify, setEmailNotify] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [showReport, setShowReport] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
 
@@ -268,6 +310,11 @@ export function QuestionsDetailPage() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!id || !isApprovedTutor || !question || question.status !== 'open') return
+    void dismiss(id)
+  }, [id, isApprovedTutor, question?.id, question?.status, dismiss])
+
   if (!subject) {
     return <Navigate to="/students" replace />
   }
@@ -276,7 +323,7 @@ export function QuestionsDetailPage() {
 
   async function answer(e: React.FormEvent) {
     e.preventDefault()
-    if (!user || !id || !question) return
+    if (!user || !id || !question || question.status === 'closed') return
     setError(null)
     setInfo(null)
 
@@ -295,7 +342,8 @@ export function QuestionsDetailPage() {
       return
     }
 
-    await supabase.from('stuck_questions').update({ status: 'answered' }).eq('id', id)
+    await supabase.rpc('mark_stuck_answered', { p_question_id: id })
+    await refreshOpenAlerts()
 
     const answerId = (data as { id: string }).id
     const recipientId =
@@ -322,8 +370,60 @@ export function QuestionsDetailPage() {
     if (!question || !user || question.author_id !== user.id) return
     await supabase.from('stuck_answers').update({ is_accepted: false }).eq('question_id', question.id)
     await supabase.from('stuck_answers').update({ is_accepted: true }).eq('id', answerId)
-    await supabase.from('stuck_questions').update({ status: 'answered' }).eq('id', question.id)
+    await supabase.rpc('mark_stuck_answered', { p_question_id: question.id })
     await load()
+  }
+
+  async function closeQuestion() {
+    if (!question || !user) return
+    setError(null)
+    const { error: err } = await supabase.rpc('close_stuck_question', {
+      p_question_id: question.id,
+    })
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setInfo('Question closed.')
+    await refreshOpenAlerts()
+    await load()
+  }
+
+  async function submitReport(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user || !question) return
+    setError(null)
+    setInfo(null)
+
+    const { data, error: err } = await supabase
+      .from('question_reports')
+      .insert({
+        question_id: question.id,
+        reporter_id: user.id,
+        reason: reportReason.trim(),
+      })
+      .select('id')
+      .single()
+
+    if (err) {
+      if (err.code === '23505') {
+        setInfo('You already reported this question. Admins have been notified.')
+        setShowReport(false)
+        return
+      }
+      setError(err.message)
+      return
+    }
+
+    const reportId = (data as { id: string }).id
+    const { error: mailErr } = await notifyQuestionReport({
+      reportId,
+      questionId: question.id,
+    })
+    if (mailErr) setInfo(mailErr)
+    else setInfo('Thanks — admins were emailed and can delete this thread if needed.')
+    setReportReason('')
+    setShowReport(false)
   }
 
   if (!question) {
@@ -336,10 +436,13 @@ export function QuestionsDetailPage() {
   }
 
   if (question.subject_slug && question.subject_slug !== subject.slug) {
-    return <Navigate to={`/students/${question.subject_slug}/questions/${question.id}`} replace />
+    return <Navigate to={questionPath(question)} replace />
   }
 
   const isAuthor = user?.id === question.author_id
+  const canClose =
+    !!user && question.status !== 'closed' && (isAuthor || isApprovedTutor || isAdmin)
+  const isClosed = question.status === 'closed'
   const recipientLabel = isAuthor
     ? 'the mentor who answered (latest other reply)'
     : 'the student who asked'
@@ -347,14 +450,73 @@ export function QuestionsDetailPage() {
   return (
     <section className="section">
       <PageBack to={listPath} label={`Back to ${subject.shortName} questions`} />
-      <h1 className="page-title">{question.title}</h1>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+        }}
+      >
+        <h1 className="page-title" style={{ marginBottom: 0 }}>
+          {question.title}
+        </h1>
+        <StatusPill status={question.status} />
+      </div>
       <p className="muted">
         {question.topics?.name ? `${question.topics.name} · ` : ''}
-        {question.profiles?.display_name} · <StatusPill status={question.status} />
+        {question.profiles?.display_name}
       </p>
-      <div className="card" style={{ whiteSpace: 'pre-wrap', marginBottom: '1.25rem' }}>
+      <div className="card" style={{ whiteSpace: 'pre-wrap', marginBottom: '1rem' }}>
         {question.body}
       </div>
+
+      <div className="split-actions" style={{ marginBottom: '1.25rem' }}>
+        {canClose && (
+          <button type="button" className="btn btn-secondary" onClick={() => void closeQuestion()}>
+            Close question
+          </button>
+        )}
+        {user && !isClosed && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              setShowReport((v) => !v)
+              setError(null)
+            }}
+          >
+            Report to admin
+          </button>
+        )}
+      </div>
+
+      {showReport && user && (
+        <form className="form card" style={{ marginBottom: '1.25rem' }} onSubmit={(e) => void submitReport(e)}>
+          <h3 style={{ margin: 0 }}>Report inappropriate question</h3>
+          <p className="muted" style={{ margin: 0 }}>
+            Admins get an email with a link to review and delete. Your report stays private.
+          </p>
+          <label>
+            Why are you reporting this? (optional)
+            <textarea
+              maxLength={1000}
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="Briefly describe the issue"
+            />
+          </label>
+          <div className="split-actions">
+            <button className="btn btn-primary" type="submit">
+              Submit report
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setShowReport(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
       <h2>Answers</h2>
       <div className="stack" style={{ marginBottom: '1.25rem' }}>
@@ -366,7 +528,7 @@ export function QuestionsDetailPage() {
               {a.is_accepted ? ' · accepted' : ''}
             </p>
             <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{a.body}</p>
-            {isAuthor && !a.is_accepted && (
+            {isAuthor && !a.is_accepted && !isClosed && (
               <div className="split-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => void accept(a.id)}>
                   Accept answer
@@ -380,7 +542,9 @@ export function QuestionsDetailPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {info && <div className="alert alert-ok">{info}</div>}
 
-      {user ? (
+      {isClosed ? (
+        <div className="empty">This question is closed. No new replies.</div>
+      ) : user ? (
         <form className="form card" onSubmit={(e) => void answer(e)}>
           <h3 style={{ margin: 0 }}>
             {isApprovedTutor ? 'Answer as mentor' : 'Your reply'}

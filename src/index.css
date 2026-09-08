@@ -1025,6 +1025,16 @@ td .split-actions {
   font-size: 0.95rem;
 }
 
+.message-banner-mentor {
+  background: color-mix(in srgb, var(--accent-violet, #5b4fcf) 12%, var(--surface, #fff));
+  border-bottom-color: color-mix(in srgb, var(--accent-violet, #5b4fcf) 35%, transparent);
+}
+
+.message-banner-admin {
+  background: color-mix(in srgb, #b91c1c 8%, var(--surface, #fff));
+  border-bottom-color: color-mix(in srgb, #b91c1c 28%, transparent);
+}
+
 .message-banner a {
   font-weight: 700;
   color: var(--accent-hover);

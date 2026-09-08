@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
+import { useAdminReportsInbox } from '@/lib/adminReportsInbox'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { catalogRecordings } from '@/lib/subjects'
 import { meetingUrlsConflict } from '@/lib/sessionLinks'
@@ -11,6 +12,7 @@ import type {
   AvailabilitySlot,
   MentorMessage,
   Profile,
+  QuestionReport,
   SessionRequest,
   StuckAnswer,
   StuckQuestion,
@@ -31,9 +33,14 @@ type Tab =
 
 export function AdminPage() {
   const { isAdmin, user, profile, isApprovedTutor, refreshProfile } = useAuth()
+  const { refresh: refreshReportBadge } = useAdminReportsInbox()
   const { topics, loading: topicsLoading } = useTopics()
   const recordings = useMemo(() => catalogRecordings(), [])
-  const [tab, setTab] = useState<Tab>('tutors')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const initialTab: Tab =
+    tabParam === 'questions' || tabParam === 'stuck' ? 'stuck' : 'tutors'
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [pending, setPending] = useState<Profile[]>([])
   const [tutors, setTutors] = useState<Profile[]>([])
   const [signups, setSignups] = useState<Profile[]>([])
@@ -42,6 +49,7 @@ export function AdminPage() {
   const [stuckAnswers, setStuckAnswers] = useState<
     (StuckAnswer & { stuck_questions?: Pick<StuckQuestion, 'id' | 'title' | 'subject_slug'> | null })[]
   >([])
+  const [questionReports, setQuestionReports] = useState<QuestionReport[]>([])
   const [mentorMessages, setMentorMessages] = useState<MentorMessage[]>([])
   const [allTopics, setAllTopics] = useState<Topic[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -96,6 +104,7 @@ export function AdminPage() {
       { data: reqRows, error: rErr },
       { data: stuckRows, error: stErr },
       { data: stuckAnswerRows, error: saErr },
+      { data: reportRows, error: repErr },
       { data: msgRows, error: msgErr },
       { data: topicRows, error: topErr },
     ] = await Promise.all([
@@ -133,6 +142,14 @@ export function AdminPage() {
         .order('created_at', { ascending: false })
         .limit(100),
       supabase
+        .from('question_reports')
+        .select(
+          '*, profiles!question_reports_reporter_id_fkey(display_name), stuck_questions(id, title, subject_slug, body, status)',
+        )
+        .is('resolved_at', null)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
         .from('mentor_messages')
         .select(
           '*, tutor:profiles!mentor_messages_tutor_id_fkey(display_name), student:profiles!mentor_messages_student_id_fkey(display_name)',
@@ -151,6 +168,7 @@ export function AdminPage() {
       rErr?.message ||
       stErr?.message ||
       saErr?.message ||
+      repErr?.message ||
       msgErr?.message ||
       topErr?.message
     if (firstErr) setError(firstErr)
@@ -167,13 +185,29 @@ export function AdminPage() {
         stuck_questions?: Pick<StuckQuestion, 'id' | 'title' | 'subject_slug'> | null
       })[]) ?? [],
     )
+    setQuestionReports((reportRows as QuestionReport[]) ?? [])
     setMentorMessages((msgRows as MentorMessage[]) ?? [])
     setAllTopics((topicRows as Topic[]) ?? [])
-  }, [isAdmin])
+    void refreshReportBadge()
+  }, [isAdmin, refreshReportBadge])
 
   useEffect(() => {
     void load()
   }, [load, topicsLoading])
+
+  useEffect(() => {
+    const next = searchParams.get('tab')
+    if (next === 'questions' || next === 'stuck') setTab('stuck')
+  }, [searchParams])
+
+  function selectTab(next: Tab) {
+    setTab(next)
+    if (next === 'stuck') {
+      setSearchParams({ tab: 'questions' }, { replace: true })
+    } else if (searchParams.has('tab')) {
+      setSearchParams({}, { replace: true })
+    }
+  }
 
   function flash(message: string) {
     setOk(message)
@@ -291,10 +325,7 @@ export function AdminPage() {
   }
 
   async function closeStuck(id: string) {
-    const { error: err } = await supabase
-      .from('stuck_questions')
-      .update({ status: 'closed' })
-      .eq('id', id)
+    const { error: err } = await supabase.rpc('close_stuck_question', { p_question_id: id })
     if (err) setError(err.message)
     else {
       flash('Question closed.')
@@ -308,6 +339,27 @@ export function AdminPage() {
     if (err) setError(err.message)
     else {
       flash('Question thread deleted.')
+      await load()
+    }
+  }
+
+  async function resolveReport(id: string) {
+    const { error: err } = await supabase.rpc('resolve_question_report', { p_report_id: id })
+    if (err) setError(err.message)
+    else {
+      flash('Report marked resolved.')
+      await load()
+    }
+  }
+
+  async function deleteStuckFromReport(questionId: string, reportId: string) {
+    if (!confirm('Delete this reported question thread and its answers?')) return
+    const { error: err } = await supabase.from('stuck_questions').delete().eq('id', questionId)
+    if (err) setError(err.message)
+    else {
+      // Cascade removes reports; resolve is unnecessary but keep UI snappy
+      void reportId
+      flash('Reported question deleted.')
       await load()
     }
   }
@@ -578,7 +630,7 @@ export function AdminPage() {
     { id: 'admins', label: 'Admins' },
     { id: 'sessions', label: 'Sessions' },
     { id: 'requests', label: 'Requests' },
-    { id: 'stuck', label: 'Questions' },
+    { id: 'stuck', label: questionReports.length > 0 ? `Questions (${questionReports.length})` : 'Questions' },
     { id: 'messages', label: 'Messages' },
     { id: 'cleanup', label: 'Cleanup' },
     { id: 'topics', label: 'Topics' },
@@ -601,7 +653,7 @@ export function AdminPage() {
             role="tab"
             aria-selected={tab === t.id}
             className={`btn ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setTab(t.id)}
+            onClick={() => selectTab(t.id)}
           >
             {t.label}
           </button>
@@ -1200,16 +1252,117 @@ export function AdminPage() {
 
       {tab === 'stuck' && (
         <div className="stack">
+          <div className="card stack" style={{ borderColor: questionReports.length ? 'var(--danger, #b91c1c)' : undefined }}>
+            <h2 style={{ margin: 0 }}>
+              Reported questions{questionReports.length > 0 ? ` (${questionReports.length})` : ''}
+            </h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Mentors and students can report inappropriate threads. Delete the thread when needed, or
+              mark the report resolved if no action is required.
+            </p>
+            {questionReports.length === 0 ? (
+              <div className="empty">No open reports.</div>
+            ) : (
+              <div className="stack">
+                {questionReports.map((r) => {
+                  const q = Array.isArray(r.stuck_questions)
+                    ? r.stuck_questions[0]
+                    : r.stuck_questions
+                  const slug = q?.subject_slug || 'precal'
+                  return (
+                    <article
+                      key={r.id}
+                      className="card"
+                      style={{
+                        boxShadow: 'none',
+                        background: 'color-mix(in srgb, #b91c1c 6%, var(--surface, #fff))',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: '0.75rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <h3 style={{ margin: 0 }}>
+                          {q ? (
+                            <Link to={`/students/${slug}/questions/${q.id}`}>{q.title}</Link>
+                          ) : (
+                            'Question removed'
+                          )}
+                        </h3>
+                        <span className="badge badge-violet">Reported</span>
+                      </div>
+                      <p className="muted" style={{ margin: '0.35rem 0', fontSize: '0.9rem' }}>
+                        {slug} · reported by {r.profiles?.display_name ?? 'user'} ·{' '}
+                        {formatDate(r.created_at.slice(0, 10))}
+                        {q?.status ? (
+                          <>
+                            {' '}
+                            · <StatusPill status={q.status} />
+                          </>
+                        ) : null}
+                      </p>
+                      {r.reason ? (
+                        <p style={{ margin: '0 0 0.5rem' }}>
+                          <strong>Reason:</strong> {r.reason}
+                        </p>
+                      ) : (
+                        <p className="muted" style={{ margin: '0 0 0.5rem' }}>
+                          No reason provided.
+                        </p>
+                      )}
+                      {q?.body ? (
+                        <p style={{ margin: '0 0 0.75rem', whiteSpace: 'pre-wrap' }}>
+                          {q.body.slice(0, 220)}
+                          {q.body.length > 220 ? '…' : ''}
+                        </p>
+                      ) : null}
+                      <div className="split-actions">
+                        {q && (
+                          <>
+                            <Link className="btn btn-secondary" to={`/students/${slug}/questions/${q.id}`}>
+                              Open thread
+                            </Link>
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={() => void deleteStuckFromReport(q.id, r.id)}
+                            >
+                              Delete thread
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => void resolveReport(r.id)}
+                        >
+                          Mark resolved
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="card stack">
             <h2 style={{ margin: 0 }}>Open question threads</h2>
             <p className="muted" style={{ margin: 0 }}>
               Subject-scoped free-form Q&amp;A. Close threads or hard-delete them (answers cascade).
+              Reported threads are listed above for quick action.
             </p>
             {stuck.length === 0 ? (
               <div className="empty">No question threads.</div>
             ) : (
               <div className="stack">
-                {stuck.map((q) => (
+                {stuck.map((q) => {
+                  const reported = questionReports.some((r) => r.question_id === q.id)
+                  return (
                   <article key={q.id} className="card" style={{ boxShadow: 'none' }}>
                     <div
                       style={{
@@ -1224,7 +1377,10 @@ export function AdminPage() {
                           {q.title}
                         </Link>
                       </h3>
-                      <StatusPill status={q.status} />
+                      <div className="badge-row">
+                        {reported && <span className="badge badge-violet">Reported</span>}
+                        <StatusPill status={q.status} />
+                      </div>
                     </div>
                     <p className="muted" style={{ margin: '0.35rem 0', fontSize: '0.9rem' }}>
                       {q.subject_slug || 'precal'}
@@ -1254,7 +1410,8 @@ export function AdminPage() {
                       </button>
                     </div>
                   </article>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

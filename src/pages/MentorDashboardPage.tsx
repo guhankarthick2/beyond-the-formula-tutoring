@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
+import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
 import { usePageView } from '@/lib/stats'
 import { catalogRecordings } from '@/lib/subjects'
 import { meetingUrlIdentity, meetingUrlsConflict } from '@/lib/sessionLinks'
@@ -21,6 +22,7 @@ function displaySlotStatus(status: string, sessionDate: string, today: string) {
 export function MentorDashboardPage() {
   usePageView('/mentors/dashboard')
   const { user, profile, isApprovedTutor } = useAuth()
+  const { openQuestions, openCount, dismiss } = useOpenQuestionsInbox()
   const { topics } = useTopics()
   const recordings = useMemo(() => catalogRecordings(), [])
   const [mySlots, setMySlots] = useState<AvailabilitySlot[]>([])
@@ -339,6 +341,58 @@ export function MentorDashboardPage() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {ok && <div className="alert alert-ok">{ok}</div>}
+
+      <div id="open-questions" className="card stack" style={{ marginTop: '1.25rem' }}>
+        <h2 style={{ margin: 0 }}>
+          Open questions{openCount > 0 ? ` (${openCount})` : ''}
+        </h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Students waiting for help. Open a thread to join the conversation; dismiss if you will not
+          take it (other mentors still see it).
+        </p>
+        {openQuestions.length === 0 ? (
+          <div className="empty">No open questions right now.</div>
+        ) : (
+          <div className="stack">
+            {openQuestions.map((q) => (
+              <article key={q.id} className="card" style={{ boxShadow: 'none' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: '0.75rem',
+                    flexWrap: 'wrap',
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <div>
+                    <h3 style={{ margin: 0 }}>
+                      <Link to={questionPath(q)}>{q.title}</Link>
+                    </h3>
+                    <p className="muted" style={{ margin: '0.35rem 0 0', fontSize: '0.9rem' }}>
+                      {q.subject_slug || 'precal'}
+                      {q.profiles?.display_name ? ` · ${q.profiles.display_name}` : ''} ·{' '}
+                      {formatDate(q.created_at.slice(0, 10))}
+                    </p>
+                  </div>
+                  <div className="split-actions">
+                    <Link className="btn btn-primary" to={questionPath(q)}>
+                      Open
+                    </Link>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => void dismiss(q.id)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="card-grid cols-2" style={{ marginTop: '1.25rem' }}>
         <article className="card stack">

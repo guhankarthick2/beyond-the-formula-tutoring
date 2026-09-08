@@ -1,13 +1,20 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
+import { useAdminReportsInbox } from '@/lib/adminReportsInbox'
 import { useMessageInbox } from '@/lib/messageInbox'
+import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, signOut, isApprovedTutor, isAdmin } = useAuth()
   const { unreadCount } = useMessageInbox()
+  const { openCount, openQuestions } = useOpenQuestionsInbox()
+  const { reportCount } = useAdminReportsInbox()
   const navigate = useNavigate()
   const location = useLocation()
   const onMySessions = location.pathname.includes('/students/my-sessions')
+  const onMentorDashboard = location.pathname.includes('/mentors/dashboard')
+  const onAdmin = location.pathname.includes('/admin')
+  const firstOpen = openQuestions[0]
 
   async function onSignOut() {
     await signOut()
@@ -61,13 +68,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </NavLink>
             )}
             {isApprovedTutor && (
-              <NavLink className="btn btn-ghost" to="/mentors/dashboard">
+              <NavLink className="btn btn-ghost nav-with-badge" to="/mentors/dashboard">
                 Mentor dashboard
+                {openCount > 0 && (
+                  <span
+                    className="nav-alert"
+                    aria-label={`${openCount} open question${openCount === 1 ? '' : 's'}`}
+                  >
+                    {openCount > 9 ? '9+' : openCount}
+                  </span>
+                )}
               </NavLink>
             )}
             {isAdmin && (
-              <NavLink className="btn btn-ghost" to="/admin">
+              <NavLink className="btn btn-ghost nav-with-badge" to="/admin?tab=questions">
                 Admin
+                {reportCount > 0 && (
+                  <span
+                    className="nav-alert"
+                    aria-label={`${reportCount} open question report${reportCount === 1 ? '' : 's'}`}
+                  >
+                    {reportCount > 9 ? '9+' : reportCount}
+                  </span>
+                )}
               </NavLink>
             )}
             {user ? (
@@ -94,6 +117,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
             You have {unreadCount === 1 ? 'a new mentor message' : `${unreadCount} new mentor messages`}.{' '}
             <Link to="/students/my-sessions">Open My sessions</Link> to read
             {unreadCount === 1 ? ' it' : ' them'}.
+          </p>
+        </div>
+      )}
+      {isApprovedTutor && openCount > 0 && !onMentorDashboard && firstOpen && (
+        <div className="message-banner message-banner-mentor" role="status">
+          <p>
+            {openCount === 1
+              ? 'A student has an open question waiting for help.'
+              : `${openCount} open questions need mentor help.`}{' '}
+            <Link to={questionPath(firstOpen)}>
+              {openCount === 1 ? 'Open the question' : 'Open the newest'}
+            </Link>
+            {openCount > 1 && (
+              <>
+                {' '}
+                or <Link to="/mentors/dashboard#open-questions">see all</Link>
+              </>
+            )}
+            .
+          </p>
+        </div>
+      )}
+      {isAdmin && reportCount > 0 && !onAdmin && (
+        <div className="message-banner message-banner-admin" role="status">
+          <p>
+            {reportCount === 1
+              ? 'A question was reported for review.'
+              : `${reportCount} questions were reported for review.`}{' '}
+            <Link to="/admin?tab=questions">Open Admin → Questions</Link> to delete or resolve.
           </p>
         </div>
       )}
