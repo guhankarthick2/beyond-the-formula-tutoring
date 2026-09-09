@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import { EphemeralChat } from '@/components/EphemeralChat'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
+import { coursePath } from '@/lib/courses'
 import { usePageView } from '@/lib/stats'
-import { catalogRecordings } from '@/lib/subjects'
+import { SUBJECTS, catalogRecordings } from '@/lib/subjects'
 import { meetingUrlIdentity, meetingUrlsConflict } from '@/lib/sessionLinks'
 import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
-import type { AvailabilitySlot, RosterStudent } from '@/lib/types'
+import type { AvailabilitySlot, RosterStudent, SessionRequest } from '@/lib/types'
 import { StatusPill } from '@/components/StatusPill'
+import { mentorProfilePath, slugifyMentorName } from '@/lib/mentors'
 
 type SessionMode = 'upcoming' | 'past'
 
@@ -21,7 +24,7 @@ function displaySlotStatus(status: string, sessionDate: string, today: string) {
 
 export function MentorDashboardPage() {
   usePageView('/mentors/dashboard')
-  const { user, profile, isApprovedTutor } = useAuth()
+  const { user, profile, isApprovedTutor, refreshProfile } = useAuth()
   const { openQuestions, openCount, dismiss } = useOpenQuestionsInbox()
   const { topics } = useTopics()
   const recordings = useMemo(() => catalogRecordings(), [])
@@ -33,10 +36,54 @@ export function MentorDashboardPage() {
 
   const [sessionMode, setSessionMode] = useState<SessionMode>('upcoming')
   const [sessionDate, setSessionDate] = useState('')
+  const [sessionSubject, setSessionSubject] = useState('precal')
   const [topicIds, setTopicIds] = useState<string[]>([])
   const [timeNote, setTimeNote] = useState('')
   const [meetingUrl, setMeetingUrl] = useState('')
   const [recordingKey, setRecordingKey] = useState('')
+
+  const [pubSlug, setPubSlug] = useState('')
+  const [pubBio, setPubBio] = useState('')
+  const [pubFocus, setPubFocus] = useState('')
+  const [pubPublic, setPubPublic] = useState(false)
+  const [pubBusy, setPubBusy] = useState(false)
+
+  useEffect(() => {
+    if (!profile) return
+    setPubSlug(profile.mentor_slug ?? slugifyMentorName(profile.display_name))
+    setPubBio(profile.mentor_bio ?? '')
+    setPubFocus(profile.mentor_focus ?? '')
+    setPubPublic(Boolean(profile.mentor_public))
+  }, [profile])
+
+  async function savePublicProfile(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user) return
+    setPubBusy(true)
+    setError(null)
+    setOk(null)
+    const slug = pubSlug.trim().toLowerCase() || null
+    const { error: err } = await supabase
+      .from('profiles')
+      .update({
+        mentor_slug: slug,
+        mentor_bio: pubBio.trim(),
+        mentor_focus: pubFocus.trim(),
+        mentor_public: pubPublic,
+      })
+      .eq('id', user.id)
+    setPubBusy(false)
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setOk(
+      pubPublic
+        ? 'Public profile published on Mentors.'
+        : 'Public profile saved (hidden until you publish).',
+    )
+    await refreshProfile()
+  }
 
   const availableRecordings = useMemo(
     () =>
@@ -55,6 +102,14 @@ export function MentorDashboardPage() {
   const [hwBody, setHwBody] = useState('')
   const [hwDue, setHwDue] = useState('')
 
+  const [openRequests, setOpenRequests] = useState<SessionRequest[]>([])
+  const [claimedByMe, setClaimedByMe] = useState<SessionRequest[]>([])
+  const [claimId, setClaimId] = useState<string | null>(null)
+  const [proposedDate, setProposedDate] = useState('')
+  const [proposedNote, setProposedNote] = useState('')
+  const [claimMeeting, setClaimMeeting] = useState('')
+  const [chatKey, setChatKey] = useState<string | null>(null)
+
   const today = new Date().toISOString().slice(0, 10)
 
   const load = useCallback(async () => {
@@ -63,7 +118,7 @@ export function MentorDashboardPage() {
 
     const slotsRes = await supabase
       .from('availability_slots')
-      .select(`*, ${SLOT_TOPICS_EMBED}`)
+      .select(`*, ${SLOT_TOPICS_EMBED}, courses(id, title, slug, subject_slug)`)
       .eq('tutor_id', user.id)
       .order('session_date', { ascending: false })
 
@@ -83,6 +138,29 @@ export function MentorDashboardPage() {
       // Fallback before migration 010: only know about own slots.
       setTakenMeetingUrls(slots.map((s) => s.meeting_url).filter(Boolean))
     }
+
+    const openReqQ = supabase
+      .from('session_requests')
+      .select(
+        '*, topics(id, name), student:profiles!session_requests_student_id_fkey(display_name)',
+      )
+      .eq('status', 'open')
+      .order('preferred_date')
+
+    const claimedQ = supabase
+      .from('session_requests')
+      .select(
+        '*, topics(id, name), student:profiles!session_requests_student_id_fkey(display_name)',
+      )
+      .eq('claimed_by', user.id)
+      .order('updated_at', { ascending: false })
+
+    const [openReq, claimed] = await Promise.all([openReqQ, claimedQ])
+    if (openReq.error) setError(openReq.error.message)
+    else setOpenRequests((openReq.data as SessionRequest[]) ?? [])
+    if (claimed.error) setError(claimed.error.message)
+    else setClaimedByMe((claimed.data as SessionRequest[]) ?? [])
+
     const slotIds = slots.map((s) => s.id)
     if (slotIds.length === 0) {
       setRoster([])
@@ -151,6 +229,29 @@ export function MentorDashboardPage() {
     return null
   }
 
+  async function claim(e: React.FormEvent) {
+    e.preventDefault()
+    if (!claimId) return
+    setError(null)
+    setOk(null)
+    const { error: err } = await supabase.rpc('claim_request', {
+      p_request_id: claimId,
+      p_proposed_date: proposedDate,
+      p_proposed_time_note: proposedNote,
+      p_meeting_url: claimMeeting,
+    })
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setClaimId(null)
+    setProposedDate('')
+    setProposedNote('')
+    setClaimMeeting('')
+    setOk('Proposal sent — waiting for the student to accept.')
+    await load()
+  }
+
   async function addSession(e: React.FormEvent) {
     e.preventDefault()
     if (!user) return
@@ -168,6 +269,7 @@ export function MentorDashboardPage() {
       .insert({
         tutor_id: user.id,
         session_date: sessionDate,
+        subject_slug: sessionSubject,
         time_note: timeNote.trim(),
         meeting_url: url,
         status: isPast ? 'booked' : 'open',
@@ -308,13 +410,13 @@ export function MentorDashboardPage() {
   if (!isApprovedTutor) {
     return (
       <section className="section">
-        <h1 className="page-title">Mentor dashboard</h1>
+        <h1 className="page-title">Workspace</h1>
         <div className="callout callout-warn">
           {profile?.tutor_status === 'pending' ? (
             <>Your interest form is pending review. An admin will approve you soon.</>
           ) : (
             <>
-              Submit the <Link to="/mentors">mentor interest form</Link> first.
+              Submit the <Link to="/mentors/join">mentor interest form</Link> first.
             </>
           )}
         </div>
@@ -325,6 +427,13 @@ export function MentorDashboardPage() {
   const uniqueStudents = Array.from(new Map(roster.map((r) => [r.id, r])).values())
 
   const bookedSlots = mySlots.filter((s) => s.status === 'booked' || s.status === 'open')
+  const upcomingSlots = mySlots.filter(
+    (s) => s.status !== 'cancelled' && s.session_date >= today,
+  )
+  const pastSlots = mySlots.filter(
+    (s) => s.status !== 'cancelled' && s.session_date < today,
+  )
+  const cancelledSlots = mySlots.filter((s) => s.status === 'cancelled')
 
   return (
     <section className="section">
@@ -332,7 +441,7 @@ export function MentorDashboardPage() {
         <div className="badge-row">
           <span className="badge badge-violet">Approved mentor</span>
         </div>
-        <h1 className="page-title">Mentor dashboard</h1>
+        <h1 className="page-title">Workspace</h1>
         <p className="lead" style={{ margin: 0 }}>
           Hello, {profile?.display_name}. Manage live and past sessions, recordings for enrolled
           students, homework, and outreach.
@@ -342,7 +451,65 @@ export function MentorDashboardPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {ok && <div className="alert alert-ok">{ok}</div>}
 
-      <div id="open-questions" className="card stack" style={{ marginTop: '1.25rem' }}>
+      <form
+        className="card form stack"
+        onSubmit={(e) => void savePublicProfile(e)}
+      >
+        <h2 style={{ margin: 0 }}>Public profile (Mentors)</h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Words-first — no photo. Students see this on{' '}
+          <Link to="/mentors">Mentors</Link>
+          {profile?.mentor_public && profile.mentor_slug ? (
+            <>
+              {' '}
+              · <Link to={mentorProfilePath(profile.mentor_slug)}>Your page</Link>
+            </>
+          ) : null}
+          .
+        </p>
+        <label>
+          Slug
+          <input
+            required={pubPublic}
+            pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+            maxLength={60}
+            value={pubSlug}
+            onChange={(e) => setPubSlug(e.target.value)}
+          />
+        </label>
+        <label>
+          Focus
+          <input
+            maxLength={160}
+            value={pubFocus}
+            onChange={(e) => setPubFocus(e.target.value)}
+            placeholder="Precalculus · AP-style problem solving"
+          />
+        </label>
+        <label>
+          About you
+          <textarea
+            maxLength={1200}
+            rows={5}
+            value={pubBio}
+            onChange={(e) => setPubBio(e.target.value)}
+            placeholder="In your own words — why you mentor, what you enjoy teaching…"
+          />
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={pubPublic}
+            onChange={(e) => setPubPublic(e.target.checked)}
+          />
+          <span>Publish on Mentors</span>
+        </label>
+        <button className="btn btn-primary" type="submit" disabled={pubBusy}>
+          {pubBusy ? 'Saving…' : 'Save public profile'}
+        </button>
+      </form>
+
+      <div id="open-questions" className="card stack">
         <h2 style={{ margin: 0 }}>
           Open questions{openCount > 0 ? ` (${openCount})` : ''}
         </h2>
@@ -394,7 +561,115 @@ export function MentorDashboardPage() {
         )}
       </div>
 
-      <div className="card-grid cols-2" style={{ marginTop: '1.25rem' }}>
+      <div id="open-requests" className="card stack">
+        <h2 style={{ margin: 0 }}>
+          Open student requests{openRequests.length > 0 ? ` (${openRequests.length})` : ''}
+        </h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Students asking for a topic and date when the public schedule does not fit. Claim to
+          propose a time.
+        </p>
+        {openRequests.length === 0 ? (
+          <div className="empty">No open requests.</div>
+        ) : (
+          <div className="stack">
+            {openRequests.map((r) => (
+              <div key={r.id} className="card" style={{ boxShadow: 'none' }}>
+                <p style={{ margin: 0 }}>
+                  <strong>
+                    {formatDate(r.preferred_date)} — {r.topics?.name}
+                  </strong>
+                </p>
+                <p className="muted" style={{ margin: '0.35rem 0' }}>
+                  Student: {r.student?.display_name}
+                  {r.watched_recording ? ' · watched recording' : ''}
+                </p>
+                {r.note && <p style={{ margin: '0 0 0.5rem' }}>{r.note}</p>}
+                <button type="button" className="btn btn-primary" onClick={() => setClaimId(r.id)}>
+                  Claim &amp; propose time
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {claimId && (
+          <form className="form" onSubmit={(e) => void claim(e)}>
+            <h3>Propose time</h3>
+            <label>
+              Date
+              <input
+                required
+                type="date"
+                value={proposedDate}
+                onChange={(e) => setProposedDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Time note
+              <input
+                value={proposedNote}
+                onChange={(e) => setProposedNote(e.target.value)}
+                maxLength={120}
+              />
+            </label>
+            <label>
+              Meeting link
+              <input
+                value={claimMeeting}
+                onChange={(e) => setClaimMeeting(e.target.value)}
+                maxLength={500}
+              />
+            </label>
+            <div className="split-actions">
+              <button className="btn btn-primary" type="submit">
+                Send proposal
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setClaimId(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+
+        {claimedByMe.length > 0 && (
+          <>
+            <h3 style={{ margin: '0.5rem 0 0' }}>Your claimed / booked requests</h3>
+            <div className="stack">
+              {claimedByMe.map((r) => (
+                <div key={r.id} className="card" style={{ boxShadow: 'none' }}>
+                  <p style={{ margin: 0 }}>
+                    {r.topics?.name} · <StatusPill status={r.status} /> · {r.student?.display_name}
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setChatKey(`request:${r.id}`)}
+                  >
+                    Chat
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {chatKey && (
+        <div className="card">
+          <EphemeralChat channelName={chatKey} />
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ marginTop: '0.75rem' }}
+            onClick={() => setChatKey(null)}
+          >
+            Close chat
+          </button>
+        </div>
+      )}
+
+      <div className="card-grid cols-2">
         <article className="card stack">
           <h2 style={{ margin: 0 }}>My students</h2>
           <p className="muted" style={{ margin: 0 }}>
@@ -452,7 +727,7 @@ export function MentorDashboardPage() {
         </article>
       </div>
 
-      <div className="card stack" style={{ marginTop: '1.25rem' }}>
+      <div className="card stack">
         <h2 style={{ margin: 0 }}>Create session</h2>
         <p className="muted" style={{ margin: 0 }}>
           Publish an upcoming live session, or add a past session so students can browse it and enroll
@@ -475,6 +750,20 @@ export function MentorDashboardPage() {
           </button>
         </div>
         <form className="form" onSubmit={(e) => void addSession(e)}>
+          <label>
+            Subject
+            <select
+              required
+              value={sessionSubject}
+              onChange={(e) => setSessionSubject(e.target.value)}
+            >
+              {SUBJECTS.map((s) => (
+                <option key={s.slug} value={s.slug}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Date
             <input
@@ -547,7 +836,7 @@ export function MentorDashboardPage() {
         </form>
       </div>
 
-      <div className="card stack" style={{ marginTop: '1.25rem' }}>
+      <div className="card stack">
         <h2 style={{ margin: 0 }}>Post homework</h2>
         <p className="muted" style={{ margin: 0 }}>
           Visible only to students enrolled in the selected session.
@@ -583,82 +872,172 @@ export function MentorDashboardPage() {
         </form>
       </div>
 
-      <div className="card stack" style={{ marginTop: '1.25rem' }}>
+      <div className="card stack">
         <h2 style={{ margin: 0 }}>Your sessions</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Attach or update a recording anytime. Students who enroll in that past session can unlock it.
-          Cancel upcoming sessions to notify enrolled students. Mark past open sessions as completed when
-          done.
+          Upcoming sessions are active. Past sessions stay here so you can attach recordings and
+          manage links — they show as completed, not as open seats.
         </p>
         {mySlots.length === 0 ? (
           <div className="empty">No sessions yet.</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Topic</th>
-                  <th>Status</th>
-                  <th>Link</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {mySlots.map((s) => (
-                  <tr key={s.id}>
-                    <td>{formatDate(s.session_date)}</td>
-                    <td>{formatSlotTopics(s)}</td>
-                    <td>
-                      <StatusPill status={displaySlotStatus(s.status, s.session_date, today)} />
-                    </td>
-                    <td>
-                      <input
-                        value={linkDrafts[s.id] ?? ''}
-                        onChange={(e) =>
-                          setLinkDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))
-                        }
-                        maxLength={500}
-                        placeholder="https://…"
-                        style={{ minWidth: '12rem' }}
-                      />
-                    </td>
-                    <td>
-                      <div className="split-actions">
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => void saveSessionLink(s.id)}
-                        >
-                          Save link
-                        </button>
-                        {s.status === 'open' && s.session_date <= today && (
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() => void markBooked(s.id)}
-                          >
-                            Mark completed
-                          </button>
-                        )}
-                        {s.status !== 'cancelled' && s.session_date >= today && (
-                          <button
-                            type="button"
-                            className="btn btn-danger"
-                            onClick={() => void cancelSession(s)}
-                          >
-                            Cancel session
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="stack">
+            <h3 style={{ margin: '0.25rem 0 0', fontSize: '1rem' }}>
+              Upcoming{upcomingSlots.length ? ` (${upcomingSlots.length})` : ''}
+            </h3>
+            {upcomingSlots.length === 0 ? (
+              <div className="empty">No upcoming sessions.</div>
+            ) : (
+              <MentorSlotsTable
+                slots={upcomingSlots}
+                today={today}
+                linkDrafts={linkDrafts}
+                setLinkDrafts={setLinkDrafts}
+                onSaveLink={(id) => void saveSessionLink(id)}
+                onMarkBooked={(id) => void markBooked(id)}
+                onCancel={(s) => void cancelSession(s)}
+                mode="upcoming"
+              />
+            )}
+
+            <h3 style={{ margin: '0.75rem 0 0', fontSize: '1rem' }}>
+              Past / completed{pastSlots.length ? ` (${pastSlots.length})` : ''}
+            </h3>
+            {pastSlots.length === 0 ? (
+              <div className="empty">No past sessions yet.</div>
+            ) : (
+              <MentorSlotsTable
+                slots={pastSlots}
+                today={today}
+                linkDrafts={linkDrafts}
+                setLinkDrafts={setLinkDrafts}
+                onSaveLink={(id) => void saveSessionLink(id)}
+                onMarkBooked={(id) => void markBooked(id)}
+                onCancel={(s) => void cancelSession(s)}
+                mode="past"
+              />
+            )}
+
+            {cancelledSlots.length > 0 && (
+              <>
+                <h3 style={{ margin: '0.75rem 0 0', fontSize: '1rem' }}>
+                  Cancelled ({cancelledSlots.length})
+                </h3>
+                <MentorSlotsTable
+                  slots={cancelledSlots}
+                  today={today}
+                  linkDrafts={linkDrafts}
+                  setLinkDrafts={setLinkDrafts}
+                  onSaveLink={(id) => void saveSessionLink(id)}
+                  onMarkBooked={(id) => void markBooked(id)}
+                  onCancel={(s) => void cancelSession(s)}
+                  mode="cancelled"
+                />
+              </>
+            )}
           </div>
         )}
       </div>
     </section>
+  )
+}
+
+function MentorSlotsTable({
+  slots,
+  today,
+  linkDrafts,
+  setLinkDrafts,
+  onSaveLink,
+  onMarkBooked,
+  onCancel,
+  mode,
+}: {
+  slots: AvailabilitySlot[]
+  today: string
+  linkDrafts: Record<string, string>
+  setLinkDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  onSaveLink: (id: string) => void
+  onMarkBooked: (id: string) => void
+  onCancel: (s: AvailabilitySlot) => void
+  mode: 'upcoming' | 'past' | 'cancelled'
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Topic</th>
+            <th>Course</th>
+            <th>Status</th>
+            <th>Link</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {slots.map((s) => (
+            <tr key={s.id}>
+              <td>{formatDate(s.session_date)}</td>
+              <td>{formatSlotTopics(s)}</td>
+              <td>
+                {s.courses ? (
+                  <Link to={coursePath(s.courses.subject_slug, s.courses.slug)}>
+                    {s.courses.title}
+                  </Link>
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </td>
+              <td>
+                <StatusPill status={displaySlotStatus(s.status, s.session_date, today)} />
+              </td>
+              <td>
+                <input
+                  value={linkDrafts[s.id] ?? ''}
+                  onChange={(e) =>
+                    setLinkDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))
+                  }
+                  maxLength={500}
+                  placeholder="https://…"
+                  style={{ minWidth: '12rem' }}
+                  disabled={mode === 'cancelled'}
+                />
+              </td>
+              <td>
+                <div className="split-actions">
+                  {mode !== 'cancelled' && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => onSaveLink(s.id)}
+                    >
+                      Save link
+                    </button>
+                  )}
+                  {mode === 'past' && s.status === 'open' && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => onMarkBooked(s.id)}
+                    >
+                      Mark completed
+                    </button>
+                  )}
+                  {mode === 'upcoming' && s.status !== 'cancelled' && (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => onCancel(s)}
+                    >
+                      Cancel session
+                    </button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

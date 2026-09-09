@@ -46,12 +46,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               Home
             </NavLink>
             <NavLink className="btn btn-ghost" to="/students">
-              Student hub
+              Students
             </NavLink>
-            <NavLink className="btn btn-ghost" to="/students/resources">
-              Free Resources
-            </NavLink>
-            <NavLink className="btn btn-ghost" to="/mentors">
+            <NavLink className="btn btn-ghost" to="/mentors" end>
               Mentors
             </NavLink>
             {user && (
@@ -69,7 +66,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             )}
             {isApprovedTutor && (
               <NavLink className="btn btn-ghost nav-with-badge" to="/mentors/dashboard">
-                Mentor dashboard
+                Workspace
                 {openCount > 0 && (
                   <span
                     className="nav-alert"
@@ -155,6 +152,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <footer className="site-footer">
         <p>Beyond The Formula — free nonprofit math & STEM tutoring</p>
         <p className="footer-links">
+          <Link to="/mentors/join">Become a mentor</Link>
+          <span aria-hidden="true"> · </span>
           <Link to="/privacy">Privacy Policy</Link>
           <span aria-hidden="true"> · </span>
           <Link to="/terms">Terms of Service</Link>

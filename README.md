@@ -123,13 +123,16 @@ If you already ran an older `schema.sql`, also run newer files under `supabase/m
 | Flow | Behavior |
 |------|----------|
 | Auth | Google OAuth or email/password; register, sign-in, forgot password |
-| Volunteer | Watch intro video → accept expectations → apply → admin approve |
+| Volunteer | Watch intro video → accept expectations → apply at `/mentors/join` → admin approve |
 | Availability | Tutor posts date + curated topic or “Any topic” |
 | Book | Students book open slots |
 | Request | Students request topic + date even if recordings exist; tutors claim & propose |
 | Chat | Supabase Realtime broadcast — **not stored** |
 | Open questions | Free-form Q&A by subject; mentors get open-question alerts; close when done; report to admin |
-| Admin | Approve mentors, moderate sessions/messages, review reports, hard-delete Q&A threads and answers |
+| Courses / bootcamps | Admin parent course + flyer; students enroll once (including mid-course) to unlock all linked sessions; flat schedule/past hide course-linked sessions |
+| Mentors | Words-first public directory (`/mentors`), ranked by sessions led; profiles at `/mentors/p/:slug`; apply at `/mentors/join` |
+| Workspace | Approved mentors manage slots, roster, homework, and public bio (`/mentors/dashboard`) |
+| Admin | Approve mentors, moderate sessions/messages, manage courses, review reports, hard-delete Q&A threads and answers |
 
 ## Q&A email notify (optional)
 
@@ -145,14 +148,16 @@ supabase secrets set SITE_URL=https://beyondtheformula.org
 
 Uses [Resend](https://resend.com). If `RESEND_API_KEY` is missing, the in-app reply/report still saves; the UI explains that email notify is unavailable.
 
-Also run migrations `015_subject_questions.sql`, `016_question_alerts_reports.sql`, and `017_question_reports_realtime.sql` so questions store `subject_slug`, mentors can dismiss open-question alerts, threads can be closed by asker/mentor/admin, reports are stored for Admin → Questions, and admins get a live in-app badge when something is reported.
+Also run migrations `015_subject_questions.sql`, `016_question_alerts_reports.sql`, `017_question_reports_realtime.sql`, and `018_courses.sql` so questions, reports, and courses/bootcamps work. Migration `018` also creates the public Storage bucket `course-flyers` (admin upload, public read). Course flyers are the exception to “no image uploads.”
+
+Seed includes **Pre-AP Precalculus Bootcamp** (`/students/precal/courses/pre-ap-precalculus-bootcamp`) with a static flyer under `public/course-flyers/`. In Admin → Courses, attach existing sessions to that course (they then leave the flat Past/Schedule lists).
 
 ## Privacy
 
 - Public UI uses **display names only**
 - Email is for login only (never shown on profiles); Q&A notify is server-side only
 - Chat warns against sharing personal contact info
-- No image storage
+- No student photo uploads; course flyers are admin-only via Storage / static assets
 
 ## Costs
 
@@ -166,7 +171,7 @@ Typical early usage stays on free tiers:
 
 The **first** admin still needs a one-time SQL promote. After that, use **Admin → Admins** in the app to search users and grant admin access. Also run migration `009_admin_set_role.sql` so in-app promotion works.
 
-Admin and mentor are separate. Promoting to admin does **not** make you a tutor. Enable mentoring later from **Admin → Tutor apps** if you want the mentor dashboard.
+Admin and mentor are separate. Promoting to admin does **not** make you a tutor. Enable mentoring later from **Admin → Tutor apps** if you want Workspace.
 
 ```sql
 -- Run migration 005 once (or the function body in supabase/migrations/005_*.sql), then:

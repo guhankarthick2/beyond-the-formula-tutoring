@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PageBack } from '@/components/PageBack'
 import { useAuth } from '@/lib/auth'
 import { useTopics } from '@/lib/hooks'
 import { supabase, youtubeChannelUrl } from '@/lib/supabase'
@@ -44,6 +45,8 @@ export function RequestPage() {
 
   return (
     <section className="section" style={{ maxWidth: '36rem' }}>
+      <PageBack to="/students/my-sessions" label="Back to My sessions" />
+
       <h1 className="page-title">Request a session</h1>
       <p className="lead">
         No open slot for the date you need? Request a curated topic. Multiple students can request
@@ -121,8 +124,8 @@ export function RequestPage() {
         {error && <div className="alert alert-error">{error}</div>}
         {ok && (
           <div className="alert alert-ok">
-            Request listed. Tutors can claim it and propose a time. Track it on your{' '}
-            <Link to="/dashboard">dashboard</Link>.
+            Request listed. Tutors can claim it and propose a time. Track it on{' '}
+            <Link to="/students/my-sessions">My sessions</Link>.
           </div>
         )}
 

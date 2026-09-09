@@ -17,6 +17,7 @@ export function AuthPage() {
     configured,
     loading,
     passwordRecovery,
+    isApprovedTutor,
     signInWithGoogle,
     signInWithGitHub,
     signUpWithPassword,
@@ -211,7 +212,9 @@ export function AuthPage() {
           {profile?.display_name
             ? `Signed in as ${profile.display_name}.`
             : 'Your session is active.'}{' '}
-          Head to your dashboard or browse open sessions.
+          Continue to My sessions
+          {isApprovedTutor ? ' or Workspace' : ''}
+          , or browse the schedule.
         </p>
 
         {needsName && (
@@ -239,12 +242,18 @@ export function AuthPage() {
         )}
 
         <div className="btn-group">
-          <Link className="btn btn-primary" to="/dashboard">
-            Dashboard
+          <Link className="btn btn-primary" to="/students/my-sessions">
+            My sessions
           </Link>
-          <Link className="btn btn-secondary" to="/sessions">
-            Sessions
-          </Link>
+          {isApprovedTutor ? (
+            <Link className="btn btn-secondary" to="/mentors/dashboard">
+              Workspace
+            </Link>
+          ) : (
+            <Link className="btn btn-secondary" to="/students">
+              Students
+            </Link>
+          )}
         </div>
       </section>
     )

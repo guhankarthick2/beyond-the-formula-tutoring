@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import { EphemeralChat } from '@/components/EphemeralChat'
 import { PageBack } from '@/components/PageBack'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
@@ -11,10 +12,14 @@ import { supabase } from '@/lib/supabase'
 import type {
   AvailabilitySlot,
   Booking,
+  Course,
+  CourseEnrollment,
   HomeworkCompletion,
   MentorMessage,
   SessionHomework,
+  SessionRequest,
 } from '@/lib/types'
+import { coursePath } from '@/lib/courses'
 
 type HomeworkRow = SessionHomework & { completed?: boolean }
 
@@ -72,9 +77,14 @@ export function StudentMySessionsPage() {
   const { user, profile, isApprovedTutor } = useAuth()
   const { refresh: refreshInbox } = useMessageInbox()
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [courseEnrollments, setCourseEnrollments] = useState<
+    (CourseEnrollment & { courses?: Course | null })[]
+  >([])
   const [tutoredSlots, setTutoredSlots] = useState<AvailabilitySlot[]>([])
   const [homework, setHomework] = useState<HomeworkRow[]>([])
   const [messages, setMessages] = useState<MentorMessage[]>([])
+  const [myRequests, setMyRequests] = useState<SessionRequest[]>([])
+  const [chatKey, setChatKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cancelBusyId, setCancelBusyId] = useState<string | null>(null)
@@ -87,14 +97,20 @@ export function StudentMySessionsPage() {
     const bookingsQ = supabase
       .from('bookings')
       .select(
-        `*, availability_slots(*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name))`,
+        `*, availability_slots(*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name), courses(id, title, slug, subject_slug))`,
       )
+      .eq('student_id', user.id)
+      .order('created_at', { ascending: false })
+
+    const coursesQ = supabase
+      .from('course_enrollments')
+      .select('*, courses(*)')
       .eq('student_id', user.id)
       .order('created_at', { ascending: false })
 
     const tutoredQ = supabase
       .from('availability_slots')
-      .select(`*, ${SLOT_TOPICS_EMBED}`)
+      .select(`*, ${SLOT_TOPICS_EMBED}, courses(id, title, slug, subject_slug)`)
       .eq('tutor_id', user.id)
       .neq('status', 'cancelled')
       .order('session_date', { ascending: false })
@@ -114,25 +130,41 @@ export function StudentMySessionsPage() {
 
     const compQ = supabase.from('homework_completions').select('*').eq('student_id', user.id)
 
-    const [bookRes, tutoredRes, hwRes, msgRes, compRes] = await Promise.all([
+    const myReqQ = supabase
+      .from('session_requests')
+      .select(
+        '*, topics(id, name), tutor:profiles!session_requests_claimed_by_fkey(display_name)',
+      )
+      .eq('student_id', user.id)
+      .order('created_at', { ascending: false })
+
+    const [bookRes, courseRes, tutoredRes, hwRes, msgRes, compRes, myReqRes] = await Promise.all([
       bookingsQ,
+      coursesQ,
       tutoredQ,
       hwQ,
       msgQ,
       compQ,
+      myReqQ,
     ])
 
     const err =
       bookRes.error?.message ||
+      courseRes.error?.message ||
       tutoredRes.error?.message ||
       hwRes.error?.message ||
       msgRes.error?.message ||
-      compRes.error?.message
+      compRes.error?.message ||
+      myReqRes.error?.message
     if (err) setError(err)
 
     const bookingRows = (bookRes.data as Booking[]) ?? []
     setBookings(bookingRows)
+    setCourseEnrollments(
+      (courseRes.data as (CourseEnrollment & { courses?: Course | null })[]) ?? [],
+    )
     setTutoredSlots((tutoredRes.data as AvailabilitySlot[]) ?? [])
+    setMyRequests((myReqRes.data as SessionRequest[]) ?? [])
 
     const slotIds = new Set(bookingRows.map((b) => b.slot_id))
     const completions = new Set(
@@ -180,6 +212,17 @@ export function StudentMySessionsPage() {
     await load()
   }
 
+  async function acceptRequest(id: string) {
+    setError(null)
+    const { error: err } = await supabase.rpc('accept_request', { p_request_id: id })
+    if (err) {
+      setError(err.message)
+      return
+    }
+    setChatKey(`request:${id}`)
+    await load()
+  }
+
   async function toggleComplete(hw: HomeworkRow) {
     if (!user) return
     if (hw.completed) {
@@ -199,19 +242,46 @@ export function StudentMySessionsPage() {
   }
 
   const today = todayIso()
-  const upcomingAttending = bookings.filter((b) => {
+  const standaloneBookings = bookings.filter((b) => !b.availability_slots?.course_id)
+  const upcomingAttending = standaloneBookings.filter((b) => {
     const d = b.availability_slots?.session_date
     return d && d >= today && b.availability_slots?.status !== 'cancelled'
   })
-  const pastAttending = bookings.filter((b) => {
+  const pastAttending = standaloneBookings.filter((b) => {
     const d = b.availability_slots?.session_date
     return d && d < today
   })
 
-  const upcomingTutoring = tutoredSlots.filter((s) => s.session_date >= today)
-  const pastTutoring = tutoredSlots.filter((s) => s.session_date < today)
+  const courseGroups = courseEnrollments
+    .map((en) => {
+      const course = en.courses
+      if (!course) return null
+      const sessions = bookings
+        .filter((b) => b.availability_slots?.course_id === course.id)
+        .map((b) => b.availability_slots)
+        .filter(Boolean) as AvailabilitySlot[]
+      sessions.sort((a, b) => a.session_date.localeCompare(b.session_date))
+      return { enrollment: en, course, sessions }
+    })
+    .filter(Boolean) as {
+    enrollment: CourseEnrollment & { courses?: Course | null }
+    course: Course
+    sessions: AvailabilitySlot[]
+  }[]
 
-  const attending = bookings.length > 0
+  const standaloneTutoring = tutoredSlots.filter((s) => !s.course_id)
+  const tutoringByCourse = new Map<string, { course: NonNullable<AvailabilitySlot['courses']>; sessions: AvailabilitySlot[] }>()
+  for (const s of tutoredSlots) {
+    if (!s.course_id || !s.courses) continue
+    const existing = tutoringByCourse.get(s.course_id)
+    if (existing) existing.sessions.push(s)
+    else tutoringByCourse.set(s.course_id, { course: s.courses, sessions: [s] })
+  }
+
+  const upcomingTutoring = standaloneTutoring.filter((s) => s.session_date >= today)
+  const pastTutoring = standaloneTutoring.filter((s) => s.session_date < today)
+
+  const attending = bookings.length > 0 || courseEnrollments.length > 0
   const tutoring = tutoredSlots.length > 0
   const hasAny = attending || tutoring
 
@@ -223,7 +293,7 @@ export function StudentMySessionsPage() {
     <section className="section">
       <PageBack to="/" label="Back to home" />
 
-      <div className="page-banner page-banner-student" style={{ marginTop: '0.85rem' }}>
+      <div className="page-banner page-banner-student">
         <div className="badge-row">
           {attending && <span className="badge badge-green">Attending as student</span>}
           {tutoring && <span className="badge badge-violet">Tutoring as mentor</span>}
@@ -244,11 +314,12 @@ export function StudentMySessionsPage() {
       {!hasAny && !loading && (
         <div className="callout callout-warn" style={{ marginTop: '1rem' }}>
           No sessions yet.{' '}
-          <Link to="/students/schedule">Browse the schedule</Link> to enroll
+          <Link to="/students">Browse the schedule</Link> to enroll, or{' '}
+          <Link to="/request">request a session</Link> for a topic and date you need
           {isApprovedTutor ? (
             <>
-              , or open the <Link to="/mentors/dashboard">mentor dashboard</Link> to publish sessions
-              you will teach
+              , or open <Link to="/mentors/dashboard">Workspace</Link> to publish sessions you will
+              teach
             </>
           ) : null}
           .
@@ -259,14 +330,47 @@ export function StudentMySessionsPage() {
         <p className="muted">Loading…</p>
       ) : (
         <>
-          <div className="card stack" style={{ marginTop: '1.25rem' }}>
+          {courseGroups.length > 0 && (
+            <div className="card stack">
+              <h2 style={{ margin: 0 }}>Courses I&apos;m enrolled in</h2>
+              <p className="muted" style={{ margin: 0 }}>
+                Mid-course enroll is fine — past recordings unlock with the rest of the program.
+              </p>
+              {courseGroups.map(({ course, sessions }) => (
+                <article key={course.id} className="card" style={{ boxShadow: 'none' }}>
+                  <h3 style={{ margin: '0 0 0.35rem' }}>
+                    <Link to={coursePath(course.subject_slug, course.slug)}>{course.title}</Link>
+                  </h3>
+                  {sessions.length === 0 ? (
+                    <p className="muted" style={{ margin: 0 }}>
+                      No sessions linked yet.
+                    </p>
+                  ) : (
+                    <ul className="schedule-list">
+                      {sessions.map((slot) => (
+                        <li key={slot.id}>
+                          {slotLine(slot, {
+                            mentorLabel: slot.profiles?.display_name ?? 'Mentor',
+                            past: slot.session_date < today,
+                          })}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+
+          <div className="card stack">
             <h2 style={{ margin: 0 }}>Sessions I&apos;m attending</h2>
             <p className="muted" style={{ margin: 0 }}>
-              Sessions you enrolled in as a student. You can cancel upcoming enrollments anytime.
+              Standalone sessions (not part of a course). You can cancel upcoming enrollments anytime.
             </p>
             {upcomingAttending.length === 0 && pastAttending.length === 0 ? (
               <div className="empty">
-                None yet. <Link to="/students/schedule">Browse the schedule</Link> to enroll.
+                None yet. <Link to="/students">Browse the schedule</Link> or{' '}
+                <Link to="/students/precal/courses">courses</Link>.
               </div>
             ) : (
               <>
@@ -313,7 +417,7 @@ export function StudentMySessionsPage() {
             )}
           </div>
 
-          <div className="card stack" style={{ marginTop: '1.25rem' }}>
+          <div className="card stack">
             <div
               style={{
                 display: 'flex',
@@ -326,24 +430,47 @@ export function StudentMySessionsPage() {
               <h2 style={{ margin: 0 }}>Sessions I&apos;m tutoring</h2>
               {isApprovedTutor && (
                 <Link className="btn btn-secondary" to="/mentors/dashboard">
-                  Mentor dashboard
+                  Workspace
                 </Link>
               )}
             </div>
             <p className="muted" style={{ margin: 0 }}>
-              Sessions you published as a mentor.
+              Sessions you published as a mentor. Course-linked sessions are grouped under their
+              bootcamp.
             </p>
-            {upcomingTutoring.length === 0 && pastTutoring.length === 0 ? (
+            {tutoringByCourse.size > 0 && (
+              <div className="stack">
+                {[...tutoringByCourse.values()].map(({ course, sessions }) => (
+                  <article key={course.id} className="card" style={{ boxShadow: 'none' }}>
+                    <h3 style={{ margin: '0 0 0.35rem' }}>
+                      <Link to={coursePath(course.subject_slug, course.slug)}>{course.title}</Link>
+                    </h3>
+                    <ul className="schedule-list">
+                      {sessions
+                        .slice()
+                        .sort((a, b) => a.session_date.localeCompare(b.session_date))
+                        .map((s) => (
+                          <li key={s.id}>
+                            {slotLine(s, { past: s.session_date < today })}
+                            {' · '}
+                            <StatusPill status={pastSessionStatus(s.status)} />
+                          </li>
+                        ))}
+                    </ul>
+                  </article>
+                ))}
+              </div>
+            )}
+            {upcomingTutoring.length === 0 && pastTutoring.length === 0 && tutoringByCourse.size === 0 ? (
               <div className="empty">
                 {isApprovedTutor ? (
                   <>
-                    None yet. Publish a session from the{' '}
-                    <Link to="/mentors/dashboard">mentor dashboard</Link>.
+                    None yet. Publish a session from <Link to="/mentors/dashboard">Workspace</Link>.
                   </>
                 ) : (
                   <>
-                    Become a mentor via the <Link to="/mentors">mentor portal</Link> to teach
-                    sessions. You can still enroll as a student anytime.
+                    <Link to="/mentors/join">Apply to become a mentor</Link> to teach sessions. You
+                    can still enroll as a student anytime.
                   </>
                 )}
               </div>
@@ -457,6 +584,104 @@ export function StudentMySessionsPage() {
             </div>
           )}
 
+          <div className="card stack">
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <h2 style={{ margin: 0 }}>Your session requests</h2>
+              <Link className="btn btn-secondary" to="/request">
+                Request a session
+              </Link>
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              Ask for a curated topic and preferred date when the public schedule does not fit.
+              Mentors can claim and propose a time.
+            </p>
+            {myRequests.length === 0 ? (
+              <div className="empty">
+                None yet. <Link to="/request">Request a session</Link>.
+              </div>
+            ) : (
+              <div className="stack">
+                {myRequests.map((r) => (
+                  <div key={r.id} className="card" style={{ boxShadow: 'none' }}>
+                    <p style={{ margin: 0 }}>
+                      <strong>
+                        {formatDate(r.preferred_date)} — {r.topics?.name}
+                      </strong>{' '}
+                      <StatusPill status={r.status} />
+                    </p>
+                    {r.status === 'claimed' && (
+                      <>
+                        <p className="muted">
+                          Tutor {r.tutor?.display_name} proposed{' '}
+                          {r.proposed_date ? formatDate(r.proposed_date) : 'a time'}
+                          {r.proposed_time_note ? ` (${r.proposed_time_note})` : ''}.
+                        </p>
+                        <div className="split-actions">
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => void acceptRequest(r.id)}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setChatKey(`request:${r.id}`)}
+                          >
+                            Chat
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    {r.status === 'booked' && (
+                      <div className="split-actions">
+                        {r.meeting_url && (
+                          <a
+                            className="btn btn-primary"
+                            href={r.meeting_url}
+                            rel="noopener noreferrer"
+                          >
+                            Join link
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => setChatKey(`request:${r.id}`)}
+                        >
+                          Chat
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {chatKey && (
+            <div className="card">
+              <EphemeralChat channelName={chatKey} />
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ marginTop: '0.75rem' }}
+                onClick={() => setChatKey(null)}
+              >
+                Close chat
+              </button>
+            </div>
+          )}
+
           <div className="section">
             <h3>Still available to you</h3>
             <div className="badge-row">
@@ -466,9 +691,12 @@ export function StudentMySessionsPage() {
               <Link className="badge badge-blue" to="/students/resources/precal">
                 Free Resources
               </Link>
+              <Link className="badge badge-blue" to="/request">
+                Request a session
+              </Link>
               {isApprovedTutor && (
                 <Link className="badge badge-violet" to="/mentors/dashboard">
-                  Mentor dashboard
+                  Workspace
                 </Link>
               )}
               <a

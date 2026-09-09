@@ -1,4 +1,4 @@
-import { CONTACT_EMAIL, CONTACT_MAILTO, YOUTUBE_HANDLE, YOUTUBE_URL } from '@/lib/contact'
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/contact'
 
 const EFFECTIVE = 'September 5, 2026'
 
@@ -30,7 +30,7 @@ export function PrivacyPolicyPage() {
         </li>
         <li>
           <strong>Service activity.</strong> Session bookings and requests, homework completion
-          markers, stuck-question posts and answers, mentor messages related to sessions, and similar
+          markers, open-question posts and answers, mentor messages related to sessions, and similar
           tutoring records needed to run the program.
         </li>
         <li>
@@ -128,11 +128,7 @@ export function PrivacyPolicyPage() {
       <h2>10. Contact</h2>
       <p>
         Questions about privacy: email Beyond The Formula at{' '}
-        <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>, or reach us via our YouTube channel{' '}
-        <a href={YOUTUBE_URL} rel="noopener noreferrer">
-          {YOUTUBE_HANDLE}
-        </a>
-        .
+        <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>.
       </p>
 
       <p className="muted legal-disclaimer">

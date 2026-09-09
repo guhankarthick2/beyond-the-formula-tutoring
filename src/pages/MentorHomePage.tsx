@@ -6,7 +6,7 @@ import { supabase, volunteerIntroVideoUrl } from '@/lib/supabase'
 import { useState } from 'react'
 
 export function MentorHomePage() {
-  usePageView('/mentors')
+  usePageView('/mentors/join')
   const { user, profile, refreshProfile, isApprovedTutor } = useAuth()
   const [watched, setWatched] = useState(false)
   const [accepted, setAccepted] = useState(false)
@@ -26,18 +26,20 @@ export function MentorHomePage() {
       return
     }
     await refreshProfile()
-    setMessage('Interest form submitted! An admin will review your application before you can access the mentor dashboard.')
+    setMessage(
+      'Interest form submitted! An admin will review your application before you can access Workspace.',
+    )
   }
 
   return (
     <section className="section">
-      <PageBack to="/" label="Back to home" />
+      <PageBack to="/mentors" label="Back to Mentors" />
 
-      <div className="page-banner page-banner-mentor" style={{ marginTop: '0.85rem' }}>
+      <div className="page-banner page-banner-mentor">
         <div className="badge-row">
           <span className="badge badge-violet">Volunteer mentors</span>
         </div>
-        <h1 className="page-title">Mentor portal</h1>
+        <h1 className="page-title">Become a mentor</h1>
         <p className="lead" style={{ margin: 0, maxWidth: '42rem' }}>
           Share your love of math and STEM. Submit an interest form — once approved, you can create
           sessions, add students, assign homework, and reach out directly.
@@ -47,11 +49,13 @@ export function MentorHomePage() {
       {isApprovedTutor && (
         <div className="callout callout-success" style={{ marginTop: '1rem' }}>
           You&apos;re an approved mentor.{' '}
-          <Link to="/mentors/dashboard"><strong>Open your dashboard →</strong></Link>
+          <Link to="/mentors/dashboard">
+            <strong>Open Workspace →</strong>
+          </Link>
         </div>
       )}
 
-      <div className="card-grid cols-2" style={{ marginTop: '1.25rem' }}>
+      <div className="card-grid cols-2">
         <article className="card">
           <h3>How onboarding works</h3>
           <ol className="step-list">
@@ -59,7 +63,7 @@ export function MentorHomePage() {
             <li>Accept mentor expectations</li>
             <li>Submit the interest form</li>
             <li>Admin reviews and approves</li>
-            <li>Access the mentor dashboard</li>
+            <li>Access Workspace</li>
           </ol>
         </article>
         <article className="card card-accent card-mentor">
@@ -70,14 +74,18 @@ export function MentorHomePage() {
             <li>Assign session-specific homework</li>
             <li>Reach out with messages and reminders</li>
           </ul>
-          <Link className="btn btn-secondary" to="/students/precal/schedule" style={{ marginTop: '0.75rem' }}>
+          <Link
+            className="btn btn-secondary"
+            to="/students/precal/schedule"
+            style={{ marginTop: '0.75rem' }}
+          >
             View public schedule
           </Link>
         </article>
       </div>
 
       {!isApprovedTutor && (
-        <div className="stack" style={{ marginTop: '1.5rem' }}>
+        <div className="stack">
           <div className="card stack">
             <h2 style={{ margin: 0 }}>1. Watch the introduction</h2>
             <div className="video-frame">
@@ -104,7 +112,11 @@ export function MentorHomePage() {
               <li>This is unpaid nonprofit volunteering.</li>
             </ul>
             <label className="checkbox-row">
-              <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
+              />
               <span>I agree to these expectations.</span>
             </label>
           </div>

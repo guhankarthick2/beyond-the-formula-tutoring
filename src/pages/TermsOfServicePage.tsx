@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { CONTACT_EMAIL, CONTACT_MAILTO, YOUTUBE_HANDLE, YOUTUBE_URL } from '@/lib/contact'
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/contact'
 
 const EFFECTIVE = 'September 5, 2026'
 
@@ -128,11 +128,7 @@ export function TermsOfServicePage() {
       <h2>13. Contact</h2>
       <p>
         Questions about these Terms: email Beyond The Formula at{' '}
-        <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>, or reach us via our YouTube channel{' '}
-        <a href={YOUTUBE_URL} rel="noopener noreferrer">
-          {YOUTUBE_HANDLE}
-        </a>
-        .
+        <a href={CONTACT_MAILTO}>{CONTACT_EMAIL}</a>.
       </p>
 
       <p className="muted legal-disclaimer">

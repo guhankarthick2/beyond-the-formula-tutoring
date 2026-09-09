@@ -25,7 +25,7 @@ export function PastSessionsPage() {
   usePageView(subject ? `/students/${subject.slug}/past` : '/students')
 
   const load = useCallback(async () => {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured || !subject) {
       setSlots([])
       setLoading(false)
       return
@@ -40,6 +40,8 @@ export function PastSessionsPage() {
         `*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name)`,
       )
       .eq('status', 'booked')
+      .eq('subject_slug', subject.slug)
+      .is('course_id', null)
       .lt('session_date', today)
       .order('session_date', { ascending: false })
 
@@ -67,7 +69,7 @@ export function PastSessionsPage() {
 
     setSlots(rows)
     setLoading(false)
-  }, [user])
+  }, [user, subject])
 
   useEffect(() => {
     void load()
@@ -97,18 +99,19 @@ export function PastSessionsPage() {
     <section className="section">
       <PageBack to={`/students/${subject.slug}`} label={`Back to ${subject.shortName}`} />
 
-      <div className="page-banner page-banner-student" style={{ marginTop: '0.85rem' }}>
+      <div className="page-banner page-banner-student">
         <div className="badge-row">
           <span className="badge badge-blue">{subject.name}</span>
         </div>
         <h1 className="page-title">Past sessions</h1>
         <p className="lead" style={{ margin: 0, maxWidth: '42rem' }}>
           Browse completed {subject.shortName} sessions and who taught them. Sign in and enroll to
-          unlock the recording and other session artifacts.
+          unlock the recording and other session artifacts. Multi-session bootcamps live under{' '}
+          <Link to={`/students/${subject.slug}/courses`}>Courses</Link>.
         </p>
       </div>
 
-      <div className="callout callout-warn" style={{ marginTop: '1.25rem' }}>
+      <div className="callout callout-warn">
         <strong>Sign up to watch.</strong> Titles and mentors are public. Enroll in a past session
         (free) to open its recording and any homework or materials attached to that session.
         {!user && (
@@ -125,15 +128,15 @@ export function PastSessionsPage() {
         </div>
       )}
 
-      <div className="card" style={{ marginTop: '1.25rem' }}>
+      <div className="card">
         {loading ? (
           <p className="muted" style={{ margin: 0 }}>
             Loading past sessions…
           </p>
         ) : slots.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>
-            No past sessions published yet. When mentors add completed sessions, they will appear
-            here.
+            0 past {subject.shortName} sessions published yet. When mentors add completed sessions,
+            they will appear here.
           </p>
         ) : (
           <div className="table-wrap">
@@ -205,6 +208,8 @@ export function PastSessionsPage() {
       <p className="muted" style={{ marginTop: '1rem' }}>
         Looking for a live class?{' '}
         <Link to={schedulePath}>View the {subject.shortName} schedule</Link>
+        {' · '}
+        <Link to={`/students/${subject.slug}/courses`}>Courses &amp; bootcamps</Link>
         {user ? (
           <>
             {' · '}
@@ -215,11 +220,4 @@ export function PastSessionsPage() {
       </p>
     </section>
   )
-}
-
-/** Old recordings URL → past sessions */
-export function RecordingsRedirect() {
-  const { subjectSlug } = useParams<{ subjectSlug: string }>()
-  if (!subjectSlug) return <Navigate to="/students" replace />
-  return <Navigate to={`/students/${subjectSlug}/past`} replace />
 }

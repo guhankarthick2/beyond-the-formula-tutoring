@@ -33,6 +33,8 @@ export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
   link: 'Links & tools',
 }
 
+const YOUTUBE_CHANNEL = 'https://www.youtube.com/@beyondtheformulatutoring'
+
 export const SUBJECTS: Subject[] = [
   {
     slug: 'precal',
@@ -128,7 +130,7 @@ export const SUBJECTS: Subject[] = [
         kind: 'video',
         title: 'Beyond The Formula YouTube',
         description: 'Free recorded lessons and walkthroughs for precalculus topics.',
-        href: 'https://www.youtube.com/@beyondtheformulatutoring',
+        href: YOUTUBE_CHANNEL,
         external: true,
       },
       {
@@ -153,28 +155,43 @@ export const SUBJECTS: Subject[] = [
     name: 'SAT Math',
     shortName: 'SAT',
     description:
-      'SAT Math practice help — free open questions for mentors to answer when they can.',
+      'SAT Math practice — live sessions, courses, past recordings, materials, and open questions as mentors publish them.',
     recordings: [],
-    resources: [
-      {
-        id: 'sat-questions',
-        kind: 'link',
-        title: 'Open questions',
-        description: 'Post a free-form SAT Math question — any approved mentor can answer.',
-        href: '/students/sat/questions',
-      },
-    ],
+    resources: [],
+  },
+  {
+    slug: 'algebra',
+    name: 'Algebra',
+    shortName: 'Algebra',
+    description:
+      'Algebra foundations — live sessions, courses, past recordings, materials, and open questions as mentors publish them.',
+    recordings: [],
+    resources: [],
+  },
+  {
+    slug: 'calculus',
+    name: 'Calculus',
+    shortName: 'Calculus',
+    description:
+      'Calculus help — live sessions, courses, past recordings, materials, and open questions as mentors publish them.',
+    recordings: [],
+    resources: [],
   },
 ]
 
-export const COMING_SOON_SUBJECTS = [
-  { slug: 'algebra', name: 'Algebra' },
-  { slug: 'calculus', name: 'Calculus' },
-]
-
-/** Slugs allowed on stuck_questions.subject_slug */
+/** Slugs allowed on stuck_questions / courses / availability_slots.subject_slug */
 export const QUESTION_SUBJECT_SLUGS = SUBJECTS.map((s) => s.slug) as string[]
 
+/** Materials under Free Resources (notes, videos, links — not practice tests). */
+export function subjectMaterialCount(subject: Subject) {
+  return subject.resources.filter(
+    (r) => r.kind === 'notes' || r.kind === 'link' || r.kind === 'video',
+  ).length
+}
+
+export function subjectTestCount(subject: Subject) {
+  return subject.resources.filter((r) => r.kind === 'test' && !r.comingSoon).length
+}
 
 export function getSubject(slug: string | undefined | null): Subject | undefined {
   if (!slug) return undefined

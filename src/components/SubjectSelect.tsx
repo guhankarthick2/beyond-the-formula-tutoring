@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom'
-import { COMING_SOON_SUBJECTS } from '@/lib/subjects'
 import { useSubject } from '@/lib/subject'
 
 export function SubjectSelect({
@@ -37,13 +36,6 @@ export function SubjectSelect({
             {s.name}
           </option>
         ))}
-        <optgroup label="Coming soon">
-          {COMING_SOON_SUBJECTS.map((s) => (
-            <option key={s.slug} value={s.slug} disabled>
-              {s.name}
-            </option>
-          ))}
-        </optgroup>
       </select>
     </label>
   )

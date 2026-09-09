@@ -10,6 +10,7 @@ create type public.tutor_status as enum ('none', 'pending', 'approved', 'rejecte
 create type public.slot_status as enum ('open', 'booked', 'cancelled');
 create type public.request_status as enum ('open', 'claimed', 'booked', 'cancelled');
 create type public.question_status as enum ('open', 'answered', 'closed');
+create type public.course_status as enum ('draft', 'published');
 
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -40,7 +41,38 @@ create table public.availability_slots (
   time_note text not null default '' check (char_length(time_note) <= 120),
   meeting_url text not null default '' check (char_length(meeting_url) <= 500),
   status public.slot_status not null default 'open',
+  subject_slug text not null default 'precal'
+    check (subject_slug in ('precal', 'sat', 'algebra', 'calculus')),
+  course_id uuid,
   created_at timestamptz not null default now()
+);
+
+create table public.courses (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (char_length(title) between 3 and 160),
+  slug text not null check (slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$' and char_length(slug) between 3 and 80),
+  subject_slug text not null default 'precal'
+    check (subject_slug in ('precal', 'sat', 'algebra', 'calculus')),
+  summary text not null default '' check (char_length(summary) <= 500),
+  body text not null default '' check (char_length(body) <= 20000),
+  flyer_path text check (flyer_path is null or char_length(flyer_path) <= 500),
+  status public.course_status not null default 'draft',
+  location_note text not null default '' check (char_length(location_note) <= 240),
+  starts_on date,
+  ends_on date,
+  created_at timestamptz not null default now(),
+  unique (slug)
+);
+
+alter table public.availability_slots
+  add constraint availability_slots_course_id_fkey
+  foreign key (course_id) references public.courses (id) on delete set null;
+
+create table public.course_enrollments (
+  course_id uuid not null references public.courses (id) on delete cascade,
+  student_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (course_id, student_id)
 );
 
 create table public.slot_topics (
@@ -122,6 +154,12 @@ create unique index availability_slots_meeting_url_unique
   where meeting_url <> '';
 create index stuck_questions_topic_idx on public.stuck_questions (topic_id, created_at desc);
 create index stuck_questions_subject_idx on public.stuck_questions (subject_slug, created_at desc);
+create index courses_subject_status_idx
+  on public.courses (subject_slug, status, starts_on desc nulls last);
+create index course_enrollments_student_idx on public.course_enrollments (student_id);
+create index availability_slots_course_idx
+  on public.availability_slots (course_id)
+  where course_id is not null;
 create index question_alert_dismissals_question_idx
   on public.question_alert_dismissals (question_id);
 create index question_reports_open_idx
@@ -281,6 +319,8 @@ alter table public.bookings enable row level security;
 alter table public.session_requests enable row level security;
 alter table public.stuck_questions enable row level security;
 alter table public.stuck_answers enable row level security;
+alter table public.courses enable row level security;
+alter table public.course_enrollments enable row level security;
 
 -- Profiles: anyone authenticated can read display names (no emails exposed)
 create policy "profiles_select_authenticated"
@@ -345,6 +385,7 @@ create policy "slots_select_public_open"
   using (
     (status = 'open' and session_date >= current_date)
     or (status = 'booked' and session_date < current_date)
+    or (course_id is not null and status in ('open', 'booked'))
   );
 
 create policy "slots_select_authenticated"
@@ -355,6 +396,7 @@ create policy "slots_select_authenticated"
     or public.is_admin()
     or public.user_booked_slot(id)
     or (status = 'booked' and session_date < current_date)
+    or (course_id is not null and status in ('open', 'booked'))
   );
 
 create policy "slots_insert_tutor"
@@ -784,7 +826,7 @@ $$;
 
 grant execute on function public.admin_set_role(uuid, public.user_role) to authenticated;
 
--- Atomic book slot: exclusive for open upcoming; multi-enroll for past/booked sessions
+-- Atomic book slot: exclusive for open upcoming; multi-enroll for past/booked or course-linked
 create or replace function public.book_slot(p_slot_id uuid)
 returns uuid
 language plpgsql
@@ -795,13 +837,14 @@ declare
   booking_id uuid;
   slot_status public.slot_status;
   slot_date date;
+  slot_course uuid;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
   end if;
 
-  select status, session_date
-  into slot_status, slot_date
+  select status, session_date, course_id
+  into slot_status, slot_date, slot_course
   from public.availability_slots
   where id = p_slot_id
   for update;
@@ -810,11 +853,22 @@ begin
     raise exception 'Session not found';
   end if;
 
+  if slot_status = 'cancelled' then
+    raise exception 'Session unavailable';
+  end if;
+
   if exists (
     select 1 from public.bookings
     where slot_id = p_slot_id and student_id = auth.uid()
   ) then
     raise exception 'Already enrolled in this session';
+  end if;
+
+  if slot_course is not null and slot_status in ('open', 'booked') then
+    insert into public.bookings (slot_id, student_id)
+    values (p_slot_id, auth.uid())
+    returning id into booking_id;
+    return booking_id;
   end if;
 
   if slot_status = 'open' and slot_date >= current_date then
@@ -1182,3 +1236,103 @@ insert into public.topics (name, slug, sort_order, youtube_url) values
 -- After first signup, promote yourself to admin (replace YOUR_USER_ID).
 -- Mentoring stays optional; enable from Admin → Tutor apps when desired.
 -- update public.profiles set role = 'admin' where id = 'YOUR_USER_ID';
+
+-- Courses helpers / RLS / enroll (see also migration 018_courses.sql)
+create or replace function public.user_enrolled_in_course(p_course_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.course_enrollments
+    where course_id = p_course_id and student_id = auth.uid()
+  );
+$$;
+
+grant execute on function public.user_enrolled_in_course(uuid) to authenticated;
+
+create or replace function public.user_can_access_slot(p_slot_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.availability_slots s
+    where s.id = p_slot_id
+      and (
+        public.user_booked_slot(s.id)
+        or (s.course_id is not null and public.user_enrolled_in_course(s.course_id))
+      )
+  );
+$$;
+
+grant execute on function public.user_can_access_slot(uuid) to authenticated;
+
+create or replace function public.enroll_in_course(p_course_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c_status public.course_status;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select status into c_status from public.courses where id = p_course_id;
+  if c_status is null then
+    raise exception 'Course not found';
+  end if;
+  if c_status <> 'published' then
+    raise exception 'Course is not open for enrollment';
+  end if;
+
+  insert into public.course_enrollments (course_id, student_id)
+  values (p_course_id, auth.uid())
+  on conflict (course_id, student_id) do nothing;
+
+  insert into public.bookings (slot_id, student_id)
+  select s.id, auth.uid()
+  from public.availability_slots s
+  where s.course_id = p_course_id
+    and s.status <> 'cancelled'
+  on conflict (slot_id, student_id) do nothing;
+end;
+$$;
+
+grant execute on function public.enroll_in_course(uuid) to authenticated;
+
+create policy "courses_select_published_or_admin"
+  on public.courses for select
+  using (status = 'published' or public.is_admin());
+
+create policy "courses_admin_insert"
+  on public.courses for insert to authenticated
+  with check (public.is_admin());
+
+create policy "courses_admin_update"
+  on public.courses for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+create policy "courses_admin_delete"
+  on public.courses for delete to authenticated
+  using (public.is_admin());
+
+create policy "course_enrollments_select_own_or_admin"
+  on public.course_enrollments for select to authenticated
+  using (student_id = auth.uid() or public.is_admin());
+
+create policy "course_enrollments_insert_own"
+  on public.course_enrollments for insert to authenticated
+  with check (student_id = auth.uid());
+
+create policy "course_enrollments_admin_delete"
+  on public.course_enrollments for delete to authenticated
+  using (public.is_admin() or student_id = auth.uid());

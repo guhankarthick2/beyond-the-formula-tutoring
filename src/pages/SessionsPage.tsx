@@ -24,7 +24,7 @@ export function SessionsPage() {
     }
   }, [subjectSlug, setSubjectSlug])
 
-  usePageView(subject ? `/students/${subject.slug}/schedule` : '/students/schedule')
+  usePageView(subject ? `/students/${subject.slug}/schedule` : '/students')
 
   if (subjectSlug && !subject) {
     return <Navigate to="/students" replace />
@@ -49,19 +49,26 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const { data, error: err } = await supabase
+    let query = supabase
       .from('availability_slots')
       .select(
         `*, ${SLOT_TOPICS_EMBED}, profiles!availability_slots_tutor_id_fkey(display_name)`,
       )
       .eq('status', 'open')
+      .is('course_id', null)
       .gte('session_date', new Date().toISOString().slice(0, 10))
       .order('session_date')
+
+    if (subject?.slug) {
+      query = query.eq('subject_slug', subject.slug)
+    }
+
+    const { data, error: err } = await query
 
     if (err) setError(err.message)
     else setSlots((data as AvailabilitySlot[]) ?? [])
     setLoading(false)
-  }, [])
+  }, [subject?.slug])
 
   useEffect(() => {
     void load()
@@ -91,7 +98,7 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
     <section className="section">
       <PageBack to="/" label="Back to home" />
 
-      <div className="page-banner page-banner-student" style={{ marginTop: '0.85rem' }}>
+      <div className="page-banner page-banner-student">
         <div className="badge-row">
           <span className="badge badge-green">Public schedule</span>
           {subject && <span className="badge badge-blue">{subject.name}</span>}
@@ -104,6 +111,14 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
           <Link to={hubPath}>Back to {subject?.shortName ?? 'student'} hub</Link>
           {' · '}
           <Link to={resourcesPath}>Free Resources</Link>
+          {subject && (
+            <>
+              {' · '}
+              <Link to={`/students/${subject.slug}/courses`}>Courses</Link>
+            </>
+          )}
+          {' · '}
+          <Link to="/request">Request a session</Link>
         </p>
         {subject && (
           <div className="subject-toolbar">
@@ -144,8 +159,11 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
         <p className="muted">Loading sessions…</p>
       ) : visibleSlots.length === 0 ? (
         <div className="empty">
-          No open sessions right now.{' '}
-          <Link to={resourcesPath}>Browse free resources</Link> while you wait.
+          {subject
+            ? `No open ${subject.shortName} sessions right now (0 on the schedule). `
+            : 'No open sessions right now. '}
+          <Link to="/request">Request a session</Link> for a topic and date you need, or{' '}
+          <Link to={resourcesPath}>browse free resources</Link> while you wait.
         </div>
       ) : (
         <div className="table-wrap card">
@@ -194,19 +212,10 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
       )}
 
       {chatSlotId && (
-        <div className="card" style={{ marginTop: '1.25rem' }}>
+        <div className="card">
           <EphemeralChat channelName={`slot:${chatSlotId}`} title="Session chat" />
         </div>
       )}
     </section>
   )
-}
-
-/** Legacy /students/schedule → subject schedule or picker */
-export function ScheduleRedirect() {
-  const { subject } = useSubject()
-  if (subject) {
-    return <Navigate to={`/students/${subject.slug}/schedule`} replace />
-  }
-  return <Navigate to="/students" replace />
 }

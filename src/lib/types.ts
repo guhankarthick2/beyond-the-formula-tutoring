@@ -3,6 +3,7 @@ export type TutorStatus = 'none' | 'pending' | 'approved' | 'rejected'
 export type SlotStatus = 'open' | 'booked' | 'cancelled'
 export type RequestStatus = 'open' | 'claimed' | 'booked' | 'cancelled'
 export type QuestionStatus = 'open' | 'answered' | 'closed'
+export type CourseStatus = 'draft' | 'published'
 
 export interface Profile {
   id: string
@@ -11,8 +12,31 @@ export interface Profile {
   tutor_status: TutorStatus
   video_watched: boolean
   expectations_accepted: boolean
+  mentor_slug?: string | null
+  mentor_bio?: string
+  mentor_focus?: string
+  mentor_public?: boolean
   created_at: string
   updated_at: string
+}
+
+export interface PublicMentorProfile {
+  id: string
+  display_name: string
+  mentor_slug: string
+  mentor_bio: string
+  mentor_focus: string
+  session_count?: number
+}
+
+export interface CourseMentorDir {
+  course_id: string
+  mentor_id: string
+  sort_order: number
+  display_name: string
+  mentor_slug: string | null
+  mentor_focus: string | null
+  is_public: boolean
 }
 
 export interface Topic {
@@ -24,6 +48,28 @@ export interface Topic {
   active: boolean
 }
 
+export interface Course {
+  id: string
+  title: string
+  slug: string
+  subject_slug: string
+  summary: string
+  body: string
+  flyer_path: string | null
+  status: CourseStatus
+  location_note: string
+  starts_on: string | null
+  ends_on: string | null
+  created_at: string
+}
+
+export interface CourseEnrollment {
+  course_id: string
+  student_id: string
+  created_at: string
+  courses?: Course | null
+}
+
 export interface AvailabilitySlot {
   id: string
   tutor_id: string
@@ -32,8 +78,11 @@ export interface AvailabilitySlot {
   meeting_url: string
   status: SlotStatus
   created_at: string
+  course_id?: string | null
+  subject_slug?: string
   slot_topics?: { topic_id: string; topics: Topic | null }[]
   profiles?: Pick<Profile, 'display_name'> | null
+  courses?: Pick<Course, 'id' | 'title' | 'slug' | 'subject_slug'> | null
 }
 
 export interface Booking {

@@ -158,7 +158,7 @@ export function QuestionsListPage() {
     <section className="section">
       <PageBack to={`/students/${subject.slug}`} label={`Back to ${subject.shortName}`} />
 
-      <div className="page-banner page-banner-student" style={{ marginTop: '0.85rem' }}>
+      <div className="page-banner page-banner-student">
         <div className="badge-row">
           <span className="badge badge-blue">{subject.name}</span>
           {isApprovedTutor && <span className="badge badge-violet">Mentors can answer</span>}
@@ -172,7 +172,7 @@ export function QuestionsListPage() {
       </div>
 
       {showTopics && (
-        <div className="card" style={{ marginTop: '1.25rem', marginBottom: '1rem' }}>
+        <div className="card" style={{ marginBottom: '1rem' }}>
           <label>
             Filter by topic (optional)
             <select value={topicFilter} onChange={(e) => setTopicFilter(e.target.value)}>
@@ -187,7 +187,7 @@ export function QuestionsListPage() {
         </div>
       )}
 
-      <div className="card stack" style={{ marginTop: showTopics ? 0 : '1.25rem', marginBottom: '1.5rem' }}>
+      <div className="card stack" style={{ marginTop: showTopics ? 0 : '0.65rem', marginBottom: '1rem' }}>
         <h2 style={{ margin: 0 }}>Ask a question</h2>
         {!user ? (
           <p className="muted" style={{ margin: 0 }}>
@@ -582,15 +582,4 @@ export function QuestionsDetailPage() {
       )}
     </section>
   )
-}
-
-/** Legacy /stuck → PreCal questions */
-export function StuckListRedirect() {
-  return <Navigate to="/students/precal/questions" replace />
-}
-
-export function StuckDetailRedirect() {
-  const { id } = useParams<{ id: string }>()
-  if (!id) return <Navigate to="/students/precal/questions" replace />
-  return <Navigate to={`/students/precal/questions/${id}`} replace />
 }

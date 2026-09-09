@@ -70,9 +70,9 @@ export function HomePage() {
         </p>
         <div className="btn-group">
           <Link className="btn btn-primary" to="/students">
-            Enter student hub
+            Enter Students
           </Link>
-          <Link className="btn btn-secondary" to="/mentors">
+          <Link className="btn btn-secondary" to="/mentors/join">
             Become a mentor
           </Link>
           <a className="btn btn-ghost" href={youtubeChannelUrl} rel="noopener noreferrer">
@@ -135,7 +135,7 @@ export function HomePage() {
               session to unlock your personal schedule and homework.
             </p>
             <Link className="btn btn-primary" to="/students">
-              Open student hub
+              Open Students
             </Link>
           </article>
           <article className="card card-accent card-mentor">
@@ -147,8 +147,8 @@ export function HomePage() {
               Submit an interest form for review. Once onboarded, create sessions, add students,
               assign homework, and reach out directly.
             </p>
-            <Link className="btn btn-secondary" to="/mentors">
-              Mentor portal
+            <Link className="btn btn-secondary" to="/mentors/join">
+              Become a mentor
             </Link>
           </article>
         </div>

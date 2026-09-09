@@ -7,6 +7,12 @@ import { formatDate } from '@/lib/hooks'
 import { formatSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { useSubject } from '@/lib/subject'
+import {
+  fetchAllSubjectLiveStats,
+  hubStatsFor,
+  subjectLooksEmpty,
+  type SubjectLiveStats,
+} from '@/lib/subjectStats'
 import { getSubject } from '@/lib/subjects'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import type { Booking } from '@/lib/types'
@@ -18,20 +24,43 @@ export function StudentHubPage() {
     <section className="section">
       <PageBack to="/" label="Back to home" />
 
-      <div className="page-banner page-banner-student" style={{ marginTop: '0.85rem' }}>
+      <div className="page-banner page-banner-student">
         <div className="badge-row">
           <span className="badge badge-green">Open to everyone</span>
         </div>
         <h1 className="page-title">Student hub</h1>
         <p className="lead" style={{ margin: 0, maxWidth: '42rem' }}>
-          Choose a subject to browse free resources and enroll in live sessions with a mentor.
+          Choose a subject to browse free resources and enroll in live sessions with a mentor. Every
+          subject has the same tools — counts below show what is ready today.
         </p>
       </div>
 
-      <div style={{ marginTop: '1.25rem' }}>
+      <div className="card-grid-spacer">
         <SubjectMenu getHref={(slug) => `/students/${slug}`} />
       </div>
     </section>
+  )
+}
+
+function FeatureMeta({
+  count,
+  emptyHint,
+  readyHint,
+}: {
+  count: number
+  emptyHint: string
+  readyHint: string
+}) {
+  return (
+    <span className="hub-card-meta">
+      {count === 0 ? (
+        <>0 — {emptyHint}</>
+      ) : (
+        <>
+          {count} {readyHint}
+        </>
+      )}
+    </span>
   )
 }
 
@@ -42,12 +71,24 @@ export function StudentSubjectPage() {
   const { user } = useAuth()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loadingEnroll, setLoadingEnroll] = useState(Boolean(user && isSupabaseConfigured))
+  const [live, setLive] = useState<SubjectLiveStats | null>(null)
 
   useEffect(() => {
     if (subjectSlug && getSubject(subjectSlug)) {
       setSubjectSlug(subjectSlug)
     }
   }, [subjectSlug, setSubjectSlug])
+
+  useEffect(() => {
+    if (!subject) return
+    let mounted = true
+    void fetchAllSubjectLiveStats().then((all) => {
+      if (mounted) setLive(all[subject.slug] ?? null)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [subject])
 
   useEffect(() => {
     if (!user || !isSupabaseConfigured) {
@@ -81,6 +122,12 @@ export function StudentSubjectPage() {
     return <Navigate to="/students" replace />
   }
 
+  const stats = hubStatsFor(
+    subject,
+    live ?? { upcoming: 0, past: 0, courses: 0, openQuestions: 0 },
+  )
+  const comingSoon = subjectLooksEmpty(stats)
+
   const today = new Date().toISOString().slice(0, 10)
   const activeBookings = bookings.filter((b) => b.availability_slots?.status !== 'cancelled')
   const upcoming = activeBookings
@@ -89,7 +136,9 @@ export function StudentSubjectPage() {
       return d && d >= today
     })
     .sort((a, b) =>
-      (a.availability_slots?.session_date ?? '').localeCompare(b.availability_slots?.session_date ?? ''),
+      (a.availability_slots?.session_date ?? '').localeCompare(
+        b.availability_slots?.session_date ?? '',
+      ),
     )
   const attended = activeBookings.filter((b) => {
     const d = b.availability_slots?.session_date
@@ -101,76 +150,130 @@ export function StudentSubjectPage() {
   const resourcesPath = `/students/resources/${subject.slug}`
   const pastPath = `/students/${subject.slug}/past`
   const questionsPath = `/students/${subject.slug}/questions`
+  const coursesPath = `/students/${subject.slug}/courses`
   const testPath = `/students/${subject.slug}/tests/unit-1`
-  const hasUnit1Test = subject.slug === 'precal'
+  const hasTests = stats.tests > 0
 
   return (
     <section className="section">
       <PageBack to="/students" label="Back to student hub" />
 
-      <div className="page-banner page-banner-student" style={{ marginTop: '0.85rem' }}>
-        <div className="badge-row">
-          <span className="badge badge-blue">{subject.name}</span>
-          {enrolled && <span className="badge badge-green">Enrolled</span>}
+      <div className="subject-hub-head">
+        <div className="subject-hub-head-top">
+          <div className="badge-row">
+            <span className="badge badge-blue">{subject.name}</span>
+            {enrolled && <span className="badge badge-green">Enrolled</span>}
+            {comingSoon && <span className="badge">Coming soon</span>}
+          </div>
+          <h1>{subject.shortName}</h1>
         </div>
-        <h1 className="page-title">{subject.shortName}</h1>
-        <p className="lead" style={{ margin: 0, maxWidth: '42rem' }}>
+        <p className="subject-hub-desc">
           {subject.description}
+          {comingSoon
+            ? ' Content is still growing — counts below show what is ready now.'
+            : null}
         </p>
       </div>
 
-      <div className="card-grid cols-2" style={{ marginTop: '1.25rem' }}>
+      <div className="card-grid cols-2 subject-hub-grid">
         <article className="card card-accent card-student stack">
-          <h3>Enroll in a live session</h3>
-          <p>See upcoming {subject.shortName} sessions with mentors and enroll when you are ready.</p>
-          <Link className="btn btn-primary" to={schedulePath}>
-            View schedule
-          </Link>
-        </article>
-        <article className="card stack">
-          <h3>Past sessions</h3>
-          <p>
-            Browse completed sessions and mentors. Sign in and enroll to unlock recordings and other
-            artifacts.
+          <div className="hub-card-head">
+            <h3>Sessions &amp; courses</h3>
+            <span className="hub-card-meta">
+              {stats.courses + stats.upcoming + stats.past === 0 ? (
+                <>0 sessions yet</>
+              ) : (
+                <>
+                  {stats.courses > 0 && (
+                    <>
+                      {stats.courses} {stats.courses === 1 ? 'course' : 'courses'} ·{' '}
+                    </>
+                  )}
+                  {stats.upcoming + stats.past}{' '}
+                  {stats.upcoming + stats.past === 1 ? 'session' : 'sessions'}
+                  {' · '}
+                  {stats.upcoming} up · {stats.past} past
+                </>
+              )}
+            </span>
+          </div>
+          <p className="hub-card-blurb">
+            Bootcamps unlock every linked session; standalone live and past stay on the public lists.
           </p>
-          <Link className="btn btn-secondary" to={pastPath}>
-            Browse past sessions
-          </Link>
-        </article>
-        <article className="card card-accent card-student stack">
-          <h3>Open questions</h3>
-          <p>
-            Free-form help for {subject.shortName}. Ask anything; approved mentors answer when they
-            can.
-          </p>
-          <Link className="btn btn-primary" to={questionsPath}>
-            Ask or browse
-          </Link>
-        </article>
-        <article className="card stack">
-          <h3>Other materials</h3>
-          <p>Worksheets, notes, topic lists, and extra practice for {subject.shortName}.</p>
-          <Link className="btn btn-secondary" to={resourcesPath}>
-            Browse materials
-          </Link>
-        </article>
-        {hasUnit1Test && (
-          <article className="card card-accent card-student stack">
-            <h3>Want to take a test in {subject.shortName}?</h3>
-            <p>Start the Unit 1 practice assessment — open to everyone, no enrollment required.</p>
-            <Link className="btn btn-primary" to={testPath}>
-              Take the PreCal test
+          <div className="btn-group">
+            <Link className="btn btn-primary" to={coursesPath}>
+              Browse courses
             </Link>
-          </article>
-        )}
+            <Link className="btn btn-secondary" to={schedulePath}>
+              Live schedule
+            </Link>
+            <Link className="btn btn-secondary" to={pastPath}>
+              Past sessions
+            </Link>
+          </div>
+        </article>
+        <article className="card card-accent card-student stack">
+          <div className="hub-card-head">
+            <h3>Open questions</h3>
+            <FeatureMeta
+              count={stats.openQuestions}
+              emptyHint="be the first to ask"
+              readyHint="open"
+            />
+          </div>
+          <p className="hub-card-blurb">Ask anything in {subject.shortName}; mentors answer when they can.</p>
+          <div className="btn-group">
+            <Link className="btn btn-primary" to={questionsPath}>
+              Ask or browse
+            </Link>
+          </div>
+        </article>
+        <article className="card stack">
+          <div className="hub-card-head">
+            <h3>Other materials</h3>
+            <FeatureMeta
+              count={stats.materials}
+              emptyHint="none yet"
+              readyHint={stats.materials === 1 ? 'material' : 'materials'}
+            />
+          </div>
+          <p className="hub-card-blurb">Worksheets, notes, and extra practice.</p>
+          <div className="btn-group">
+            <Link className="btn btn-secondary" to={resourcesPath}>
+              Browse materials
+            </Link>
+          </div>
+        </article>
+        <article className="card card-accent card-student stack">
+          <div className="hub-card-head">
+            <h3>Practice tests</h3>
+            <FeatureMeta
+              count={stats.tests}
+              emptyHint="none yet"
+              readyHint={stats.tests === 1 ? 'test' : 'tests'}
+            />
+          </div>
+          <p className="hub-card-blurb">
+            {hasTests ? 'Open assessments — no enrollment required.' : 'Tests will appear here when ready.'}
+          </p>
+          <div className="btn-group">
+            {hasTests ? (
+              <Link className="btn btn-primary" to={testPath}>
+                Take a test
+              </Link>
+            ) : (
+              <Link className="btn btn-secondary" to={resourcesPath}>
+                Materials &amp; tests
+              </Link>
+            )}
+          </div>
+        </article>
       </div>
 
       {loadingEnroll && user ? (
-        <p className="muted" style={{ marginTop: '1.5rem' }}>
-          Loading your enrollment…
-        </p>
+        <p className="muted subject-hub-enroll">Loading your enrollment…</p>
       ) : enrolled ? (
-        <div className="stack" style={{ marginTop: '1.5rem' }}>
+        <div className="stack subject-hub-enroll">
           <div className="card stack">
             <h2 style={{ margin: 0 }}>Current session schedule</h2>
             {upcoming.length === 0 ? (
@@ -238,7 +341,7 @@ export function StudentSubjectPage() {
           )}
         </div>
       ) : (
-        <div className="callout callout-info" style={{ marginTop: '1.5rem' }}>
+        <div className="callout callout-info subject-hub-enroll">
           <strong>Not enrolled yet?</strong> Enroll from the schedule to see your current session,
           classes attended, and what is remaining.
           {!user && (

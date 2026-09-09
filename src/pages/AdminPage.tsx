@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { AdminCoursesPanel } from '@/pages/AdminCoursesPanel'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { useAdminReportsInbox } from '@/lib/adminReportsInbox'
 import { formatDate, useTopics } from '@/lib/hooks'
-import { catalogRecordings } from '@/lib/subjects'
+import { catalogRecordings, SUBJECTS } from '@/lib/subjects'
 import { meetingUrlsConflict } from '@/lib/sessionLinks'
 import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
@@ -25,6 +26,7 @@ type Tab =
   | 'signups'
   | 'admins'
   | 'sessions'
+  | 'courses'
   | 'requests'
   | 'stuck'
   | 'messages'
@@ -66,6 +68,7 @@ export function AdminPage() {
   const [mentorQuery, setMentorQuery] = useState('')
   const [selectedMentorId, setSelectedMentorId] = useState('')
   const [attrDate, setAttrDate] = useState('')
+  const [attrSubject, setAttrSubject] = useState('precal')
   const [attrTopicIds, setAttrTopicIds] = useState<string[]>([])
   const [attrTimeNote, setAttrTimeNote] = useState('')
   const [attrRecordingKey, setAttrRecordingKey] = useState('')
@@ -90,6 +93,12 @@ export function AdminPage() {
   const [adminHits, setAdminHits] = useState<Profile[]>([])
   const [adminList, setAdminList] = useState<Profile[]>([])
   const [adminSearching, setAdminSearching] = useState(false)
+
+  const [mentorEditId, setMentorEditId] = useState<string | null>(null)
+  const [mentorSlug, setMentorSlug] = useState('')
+  const [mentorBio, setMentorBio] = useState('')
+  const [mentorFocus, setMentorFocus] = useState('')
+  const [mentorPublic, setMentorPublic] = useState(false)
 
   const load = useCallback(async () => {
     if (!isAdmin) return
@@ -230,6 +239,23 @@ export function AdminPage() {
       )
       await load()
       if (id === user?.id) await refreshProfile()
+    }
+  }
+
+  async function saveMentorPublicProfile() {
+    if (!mentorEditId) return
+    const { error: err } = await supabase.rpc('admin_set_mentor_profile', {
+      p_user_id: mentorEditId,
+      p_mentor_slug: mentorSlug.trim().toLowerCase(),
+      p_mentor_bio: mentorBio,
+      p_mentor_focus: mentorFocus,
+      p_mentor_public: mentorPublic,
+    })
+    if (err) setError(err.message)
+    else {
+      flash('Mentor public profile saved.')
+      setMentorEditId(null)
+      await load()
     }
   }
 
@@ -385,13 +411,13 @@ export function AdminPage() {
   }
 
   async function purgeStuck() {
-    if (!confirm(`Delete all stuck-point threads older than ${stuckDays} days?`)) return
+    if (!confirm(`Delete all open-question threads older than ${stuckDays} days?`)) return
     const { data, error: err } = await supabase.rpc('admin_purge_stuck_older_than', {
       p_days: stuckDays,
     })
     if (err) setError(err.message)
     else {
-      flash(`Purged ${data as number} stuck-point thread(s).`)
+      flash(`Purged ${data as number} open-question thread(s).`)
       await load()
     }
   }
@@ -506,6 +532,7 @@ export function AdminPage() {
     const payload = {
       tutor_id: selectedMentorId,
       session_date: attrDate,
+      subject_slug: attrSubject,
       time_note: attrTimeNote.trim(),
       meeting_url: url,
       status: 'booked' as const,
@@ -562,6 +589,7 @@ export function AdminPage() {
     setSelectedMentorId('')
     setMentorQuery('')
     setAttrDate('')
+    setAttrSubject('precal')
     setAttrTimeNote('')
     setAttrUrl('')
     setAttrRecordingKey('')
@@ -578,6 +606,7 @@ export function AdminPage() {
     setSelectedMentorId(slot.tutor_id)
     setMentorQuery(slot.profiles?.display_name ?? '')
     setAttrDate(slot.session_date)
+    setAttrSubject(slot.subject_slug || 'precal')
     setAttrTimeNote(slot.time_note ?? '')
     setAttrUrl(slot.meeting_url ?? '')
     setAttrRecordingKey('')
@@ -629,6 +658,7 @@ export function AdminPage() {
     { id: 'signups', label: 'Sign-ups' },
     { id: 'admins', label: 'Admins' },
     { id: 'sessions', label: 'Sessions' },
+    { id: 'courses', label: 'Courses' },
     { id: 'requests', label: 'Requests' },
     { id: 'stuck', label: questionReports.length > 0 ? `Questions (${questionReports.length})` : 'Questions' },
     { id: 'messages', label: 'Messages' },
@@ -641,7 +671,7 @@ export function AdminPage() {
       <h1 className="page-title">Admin</h1>
       <p className="lead">
         Approve volunteers, publish past sessions for mentors, moderate sign-ups and requests, and
-        clear old stuck points or session data. Admin does not imply mentoring — enable that for yourself
+        clear old open questions or session data. Admin does not imply mentoring — enable that for yourself
         under Tutor apps if you want it. In-app chat is never stored.
       </p>
 
@@ -752,6 +782,24 @@ export function AdminPage() {
                   >
                     <strong>{p.display_name}</strong>
                     <span className="pill">{p.role}</span>
+                    {p.mentor_public ? (
+                      <span className="badge badge-green">Public profile</span>
+                    ) : (
+                      <span className="muted">Profile hidden</span>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setMentorEditId(p.id)
+                        setMentorSlug(p.mentor_slug ?? '')
+                        setMentorBio(p.mentor_bio ?? '')
+                        setMentorFocus(p.mentor_focus ?? '')
+                        setMentorPublic(Boolean(p.mentor_public))
+                      }}
+                    >
+                      Edit About
+                    </button>
                     {p.role === 'admin' && p.id !== user?.id ? (
                       <span className="muted">Admin mentor (manage their own mentoring)</span>
                     ) : (
@@ -770,6 +818,69 @@ export function AdminPage() {
               </div>
             )}
           </div>
+
+          {mentorEditId && (
+            <form
+              className="card form stack"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void saveMentorPublicProfile()
+              }}
+            >
+              <h2 style={{ margin: 0 }}>
+                Public mentor profile —{' '}
+                {tutors.find((t) => t.id === mentorEditId)?.display_name ?? 'mentor'}
+              </h2>
+              <p className="muted" style={{ margin: 0 }}>
+                Words-first Mentors directory at /mentors. Requires a slug to publish.
+              </p>
+              <label>
+                Slug
+                <input
+                  required={mentorPublic}
+                  pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                  maxLength={60}
+                  value={mentorSlug}
+                  onChange={(e) => setMentorSlug(e.target.value)}
+                  placeholder="e.g. jordan-lee"
+                />
+              </label>
+              <label>
+                Focus (short)
+                <input
+                  maxLength={160}
+                  value={mentorFocus}
+                  onChange={(e) => setMentorFocus(e.target.value)}
+                  placeholder="Precalculus · AP-style problem solving"
+                />
+              </label>
+              <label>
+                About (in their words)
+                <textarea
+                  maxLength={1200}
+                  rows={6}
+                  value={mentorBio}
+                  onChange={(e) => setMentorBio(e.target.value)}
+                />
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={mentorPublic}
+                  onChange={(e) => setMentorPublic(e.target.checked)}
+                />
+                <span>Show on Mentors</span>
+              </label>
+              <div className="split-actions">
+                <button className="btn btn-primary" type="submit">
+                  Save profile
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setMentorEditId(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 
@@ -1020,7 +1131,7 @@ export function AdminPage() {
             <p className="muted" style={{ margin: 0 }}>
               {editingSlotId
                 ? 'Fix date, mentor, topic, label, or recording for this published past session.'
-                : 'Publish a completed session (and optional recording) under any approved mentor. Students browse it publicly and sign in to enroll for the recording and other artifacts. Mentors can also add their own past sessions from the mentor dashboard.'}
+                : 'Publish a completed session (and optional recording) under any approved mentor. Students browse it publicly and sign in to enroll for the recording and other artifacts. Mentors can also add their own past sessions from Workspace.'}
             </p>
             <form className="form" onSubmit={(e) => void attributeSession(e)}>
               <label>
@@ -1073,6 +1184,20 @@ export function AdminPage() {
                   </button>
                 </p>
               )}
+              <label>
+                Subject
+                <select
+                  required
+                  value={attrSubject}
+                  onChange={(e) => setAttrSubject(e.target.value)}
+                >
+                  {SUBJECTS.map((s) => (
+                    <option key={s.slug} value={s.slug}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Session date
                 <input
@@ -1207,6 +1332,10 @@ export function AdminPage() {
             )}
           </div>
         </div>
+      )}
+
+      {tab === 'courses' && (
+        <AdminCoursesPanel tutors={tutors} flash={flash} setError={setError} />
       )}
 
       {tab === 'requests' && (
@@ -1498,7 +1627,7 @@ export function AdminPage() {
       {tab === 'cleanup' && (
         <div className="stack">
           <div className="card stack">
-            <h2 style={{ margin: 0 }}>Purge old stuck points</h2>
+            <h2 style={{ margin: 0 }}>Purge old open questions</h2>
             <p className="muted" style={{ margin: 0 }}>
               Permanently deletes question threads (and answers) older than the chosen age.
             </p>
@@ -1512,7 +1641,7 @@ export function AdminPage() {
               />
             </label>
             <button type="button" className="btn btn-danger" onClick={() => void purgeStuck()}>
-              Purge old stuck points
+              Purge old open questions
             </button>
           </div>
 
