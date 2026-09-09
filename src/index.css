@@ -143,6 +143,27 @@ h3,
   align-items: center;
 }
 
+.nav .btn-ghost:hover:not(:disabled) {
+  background: var(--highlight);
+  color: var(--text);
+}
+
+.nav .btn-ghost.active,
+.nav .btn-ghost[aria-current='page'] {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 700;
+  border-color: #9ccbb5;
+  box-shadow: 0 1px 0 rgba(20, 32, 51, 0.06);
+}
+
+.nav .btn-ghost.active:hover:not(:disabled),
+.nav .btn-ghost[aria-current='page']:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--accent-hover);
+  border-color: var(--accent);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

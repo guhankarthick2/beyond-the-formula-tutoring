@@ -4,6 +4,10 @@ import { useAdminReportsInbox } from '@/lib/adminReportsInbox'
 import { useMessageInbox } from '@/lib/messageInbox'
 import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
 
+function navClass(base: string, isActive: boolean) {
+  return isActive ? `${base} active` : base
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, signOut, isApprovedTutor, isAdmin } = useAuth()
   const { unreadCount } = useMessageInbox()
@@ -11,10 +15,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { reportCount } = useAdminReportsInbox()
   const navigate = useNavigate()
   const location = useLocation()
-  const onMySessions = location.pathname.includes('/students/my-sessions')
-  const onMentorDashboard = location.pathname.includes('/mentors/dashboard')
-  const onAdmin = location.pathname.includes('/admin')
+  const path = location.pathname
+  const onMySessions = path.includes('/students/my-sessions')
+  const onMentorDashboard = path.includes('/mentors/dashboard')
+  const onAdmin = path.includes('/admin')
   const firstOpen = openQuestions[0]
+  const studentsNavActive =
+    path === '/students' || (path.startsWith('/students/') && !path.startsWith('/students/my-sessions'))
+  const mentorsNavActive =
+    path === '/mentors' || path.startsWith('/mentors/join') || path.startsWith('/mentors/p/')
 
   async function onSignOut() {
     await signOut()
@@ -42,17 +51,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
           <nav className="nav" aria-label="Primary">
-            <NavLink className="btn btn-ghost" to="/" end>
+            <NavLink className={({ isActive }) => navClass('btn btn-ghost', isActive)} to="/" end>
               Home
             </NavLink>
-            <NavLink className="btn btn-ghost" to="/students">
+            <Link
+              to="/students"
+              className={navClass('btn btn-ghost', studentsNavActive)}
+              aria-current={studentsNavActive ? 'page' : undefined}
+            >
               Students
-            </NavLink>
-            <NavLink className="btn btn-ghost" to="/mentors" end>
+            </Link>
+            <Link
+              to="/mentors"
+              className={navClass('btn btn-ghost', mentorsNavActive)}
+              aria-current={mentorsNavActive ? 'page' : undefined}
+            >
               Mentors
-            </NavLink>
+            </Link>
             {user && (
-              <NavLink className="btn btn-ghost nav-with-badge" to="/students/my-sessions">
+              <NavLink
+                className={({ isActive }) => navClass('btn btn-ghost nav-with-badge', isActive)}
+                to="/students/my-sessions"
+              >
                 My sessions
                 {unreadCount > 0 && (
                   <span
@@ -65,7 +85,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </NavLink>
             )}
             {isApprovedTutor && (
-              <NavLink className="btn btn-ghost nav-with-badge" to="/mentors/dashboard">
+              <NavLink
+                className={({ isActive }) => navClass('btn btn-ghost nav-with-badge', isActive)}
+                to="/mentors/dashboard"
+              >
                 Workspace
                 {openCount > 0 && (
                   <span
@@ -78,7 +101,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </NavLink>
             )}
             {isAdmin && (
-              <NavLink className="btn btn-ghost nav-with-badge" to="/admin?tab=questions">
+              <NavLink
+                className={({ isActive }) => navClass('btn btn-ghost nav-with-badge', isActive)}
+                to="/admin?tab=questions"
+              >
                 Admin
                 {reportCount > 0 && (
                   <span
