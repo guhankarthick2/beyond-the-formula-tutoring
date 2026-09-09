@@ -1,26 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { EphemeralChat } from '@/components/EphemeralChat'
+import { RecordingsCarousel, recordingItemsFromSlots } from '@/components/RecordingsCarousel'
 import { useAuth } from '@/lib/auth'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
 import { coursePath } from '@/lib/courses'
 import { usePageView } from '@/lib/stats'
 import { SUBJECTS, catalogRecordings } from '@/lib/subjects'
-import { meetingUrlIdentity, meetingUrlsConflict } from '@/lib/sessionLinks'
+import { recordingUrlsConflict } from '@/lib/sessionLinks'
+import { slotDisplayStatus } from '@/lib/slotStatus'
 import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
 import type { AvailabilitySlot, RosterStudent, SessionRequest } from '@/lib/types'
 import { StatusPill } from '@/components/StatusPill'
-import { mentorProfilePath, slugifyMentorName } from '@/lib/mentors'
+import {
+  MENTOR_NOTES_FIELD_MAX,
+  mentorProfilePath,
+  serializeMentorNotes,
+  slugifyMentorName,
+} from '@/lib/mentors'
 
 type SessionMode = 'upcoming' | 'past'
-
-function displaySlotStatus(status: string, sessionDate: string, today: string) {
-  if (status === 'cancelled') return 'cancelled'
-  if (sessionDate <= today) return 'completed'
-  return status
-}
 
 export function MentorDashboardPage() {
   usePageView('/mentors/dashboard')
@@ -29,7 +30,7 @@ export function MentorDashboardPage() {
   const { topics } = useTopics()
   const recordings = useMemo(() => catalogRecordings(), [])
   const [mySlots, setMySlots] = useState<AvailabilitySlot[]>([])
-  const [takenMeetingUrls, setTakenMeetingUrls] = useState<string[]>([])
+  const [takenRecordingUrls, setTakenRecordingUrls] = useState<string[]>([])
   const [roster, setRoster] = useState<RosterStudent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
@@ -45,6 +46,7 @@ export function MentorDashboardPage() {
   const [pubSlug, setPubSlug] = useState('')
   const [pubBio, setPubBio] = useState('')
   const [pubFocus, setPubFocus] = useState('')
+  const [pubNotes, setPubNotes] = useState('')
   const [pubPublic, setPubPublic] = useState(false)
   const [pubBusy, setPubBusy] = useState(false)
 
@@ -53,6 +55,7 @@ export function MentorDashboardPage() {
     setPubSlug(profile.mentor_slug ?? slugifyMentorName(profile.display_name))
     setPubBio(profile.mentor_bio ?? '')
     setPubFocus(profile.mentor_focus ?? '')
+    setPubNotes(profile.mentor_notes ?? '')
     setPubPublic(Boolean(profile.mentor_public))
   }, [profile])
 
@@ -69,6 +72,7 @@ export function MentorDashboardPage() {
         mentor_slug: slug,
         mentor_bio: pubBio.trim(),
         mentor_focus: pubFocus.trim(),
+        mentor_notes: serializeMentorNotes(pubNotes),
         mentor_public: pubPublic,
       })
       .eq('id', user.id)
@@ -88,9 +92,9 @@ export function MentorDashboardPage() {
   const availableRecordings = useMemo(
     () =>
       recordings.filter(
-        (r) => !r.href || !takenMeetingUrls.some((u) => meetingUrlsConflict(r.href!, u)),
+        (r) => !r.href || !takenRecordingUrls.some((u) => recordingUrlsConflict(r.href!, u)),
       ),
-    [recordings, takenMeetingUrls],
+    [recordings, takenRecordingUrls],
   )
   const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({})
 
@@ -129,14 +133,25 @@ export function MentorDashboardPage() {
 
     const slots = (slotsRes.data as AvailabilitySlot[]) ?? []
     setMySlots(slots)
-    setLinkDrafts(Object.fromEntries(slots.map((s) => [s.id, s.meeting_url ?? ''])))
+    setLinkDrafts(
+      Object.fromEntries(
+        slots.map((s) => [
+          s.id,
+          s.session_date <= today ? (s.recording_url ?? '') : (s.meeting_url ?? ''),
+        ]),
+      ),
+    )
 
-    const takenRes = await supabase.rpc('list_taken_meeting_urls')
+    const takenRes = await supabase.rpc('list_taken_recording_urls')
     if (!takenRes.error && takenRes.data) {
-      setTakenMeetingUrls(takenRes.data as string[])
+      setTakenRecordingUrls(takenRes.data as string[])
     } else {
-      // Fallback before migration 010: only know about own slots.
-      setTakenMeetingUrls(slots.map((s) => s.meeting_url).filter(Boolean))
+      const legacy = await supabase.rpc('list_taken_meeting_urls')
+      if (!legacy.error && legacy.data) {
+        setTakenRecordingUrls(legacy.data as string[])
+      } else {
+        setTakenRecordingUrls(slots.map((s) => s.recording_url).filter(Boolean))
+      }
     }
 
     const openReqQ = supabase
@@ -193,7 +208,7 @@ export function MentorDashboardPage() {
       }
       setRoster(rows)
     }
-  }, [user, isApprovedTutor])
+  }, [user, isApprovedTutor, today])
 
   useEffect(() => {
     void load()
@@ -208,19 +223,18 @@ export function MentorDashboardPage() {
     setTimeNote(rec.name)
   }
 
-  async function assertMeetingUrlAvailable(url: string, excludeSlotId?: string) {
-    const identity = meetingUrlIdentity(url)
-    if (!identity) return null
+  async function assertRecordingUrlAvailable(url: string, excludeSlotId?: string) {
+    if (!url.trim()) return null
     const hit = mySlots.find(
-      (s) => s.id !== excludeSlotId && meetingUrlsConflict(url, s.meeting_url),
+      (s) => s.id !== excludeSlotId && recordingUrlsConflict(url, s.recording_url ?? ''),
     )
     if (hit) {
       return 'That recording is already linked to one of your sessions.'
     }
-    const taken = takenMeetingUrls.find((u) => meetingUrlsConflict(url, u))
+    const taken = takenRecordingUrls.find((u) => recordingUrlsConflict(url, u))
     if (taken) {
       const stillMine = mySlots.some(
-        (s) => s.id === excludeSlotId && meetingUrlsConflict(url, s.meeting_url),
+        (s) => s.id === excludeSlotId && recordingUrlsConflict(url, s.recording_url ?? ''),
       )
       if (!stillMine) {
         return 'That recording is already linked to another session. Ask an admin to remove the existing past session if it should be reassigned.'
@@ -257,8 +271,8 @@ export function MentorDashboardPage() {
     if (!user) return
     const isPast = sessionMode === 'past'
     const url = meetingUrl.trim()
-    if (url) {
-      const conflict = await assertMeetingUrlAvailable(url)
+    if (isPast && url) {
+      const conflict = await assertRecordingUrlAvailable(url)
       if (conflict) {
         setError(conflict)
         return
@@ -271,7 +285,8 @@ export function MentorDashboardPage() {
         session_date: sessionDate,
         subject_slug: sessionSubject,
         time_note: timeNote.trim(),
-        meeting_url: url,
+        meeting_url: isPast ? '' : url,
+        recording_url: isPast ? url : '',
         status: isPast ? 'booked' : 'open',
       })
       .select('id')
@@ -279,7 +294,7 @@ export function MentorDashboardPage() {
     if (err) {
       setError(
         err.message.includes('already attributed')
-          ? 'That recording or meeting link is already used on another past session.'
+          ? 'That recording link is already used on another past session.'
           : err.message,
       )
     } else {
@@ -302,28 +317,30 @@ export function MentorDashboardPage() {
     }
   }
 
-  async function saveSessionLink(slotId: string) {
+  async function saveSessionLink(slotId: string, mode: 'upcoming' | 'past' | 'cancelled') {
     const url = (linkDrafts[slotId] ?? '').trim()
-    if (url) {
-      const conflict = await assertMeetingUrlAvailable(url, slotId)
+    if (mode === 'past' && url) {
+      const conflict = await assertRecordingUrlAvailable(url, slotId)
       if (conflict) {
         setError(conflict)
         return
       }
     }
+    const patch =
+      mode === 'past' ? { recording_url: url } : { meeting_url: url }
     const { error: err } = await supabase
       .from('availability_slots')
-      .update({ meeting_url: url })
+      .update(patch)
       .eq('id', slotId)
       .eq('tutor_id', user!.id)
     if (err) {
       setError(
         err.message.includes('already attributed')
-          ? 'That recording or meeting link is already used on another past session.'
+          ? 'That recording link is already used on another past session.'
           : err.message,
       )
     } else {
-      setOk('Link updated.')
+      setOk(mode === 'past' ? 'Recording link updated.' : 'Join link updated.')
       await load()
     }
   }
@@ -435,6 +452,23 @@ export function MentorDashboardPage() {
   )
   const cancelledSlots = mySlots.filter((s) => s.status === 'cancelled')
 
+  const courseRecordingGroups = useMemo(() => {
+    const map = new Map<
+      string,
+      { course: NonNullable<AvailabilitySlot['courses']>; sessions: AvailabilitySlot[] }
+    >()
+    for (const s of mySlots) {
+      if (!s.course_id || !s.courses || !s.recording_url?.trim()) continue
+      const existing = map.get(s.course_id)
+      if (existing) existing.sessions.push(s)
+      else map.set(s.course_id, { course: s.courses, sessions: [s] })
+    }
+    return [...map.values()].map(({ course, sessions }) => ({
+      course,
+      items: recordingItemsFromSlots(sessions),
+    }))
+  }, [mySlots])
+
   return (
     <section className="section">
       <div className="page-banner page-banner-mentor">
@@ -495,6 +529,19 @@ export function MentorDashboardPage() {
             onChange={(e) => setPubBio(e.target.value)}
             placeholder="In your own words — why you mentor, what you enjoy teaching…"
           />
+        </label>
+        <label>
+          Highlights (one per line)
+          <textarea
+            maxLength={MENTOR_NOTES_FIELD_MAX}
+            rows={5}
+            value={pubNotes}
+            onChange={(e) => setPubNotes(e.target.value)}
+            placeholder={'Founder — Beyond The Formula\nJunior — Plano West Senior High\nVarsity Soccer'}
+          />
+          <span className="muted" style={{ fontSize: '0.85rem' }}>
+            Short personal notes beside your bio (up to 8 lines, ~72 characters each).
+          </span>
         </label>
         <label className="checkbox-row">
           <input
@@ -821,15 +868,22 @@ export function MentorDashboardPage() {
             />
           </label>
           <label>
-            {sessionMode === 'past' ? 'Recording URL' : 'Meeting link (shown after enrollment)'}
+            {sessionMode === 'past' ? 'Recording URL' : 'Join link (shown after enrollment)'}
             <input
               value={meetingUrl}
               onChange={(e) => setMeetingUrl(e.target.value)}
               maxLength={500}
-              placeholder="https://…"
+              placeholder={
+                sessionMode === 'past' ? 'https://youtube.com/… or other recording link' : 'https://zoom.us/…'
+              }
               required={sessionMode === 'past'}
             />
           </label>
+          <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+            {sessionMode === 'past'
+              ? 'YouTube links embed on My sessions; other URLs open externally. Join links are not shown on past sessions.'
+              : 'Use Zoom/Meet here. Add the recording later from Past sessions.'}
+          </p>
           <button className="btn btn-primary" type="submit">
             {sessionMode === 'past' ? 'Save as my past session' : 'Publish session'}
           </button>
@@ -849,7 +903,7 @@ export function MentorDashboardPage() {
               {bookedSlots.map((s) => (
                 <option key={s.id} value={s.id}>
                   {formatDate(s.session_date)} — {formatSlotTopics(s)} (
-                  {displaySlotStatus(s.status, s.session_date, today)})
+                  {slotDisplayStatus(s.status, s.session_date, today)})
                 </option>
               ))}
             </select>
@@ -878,6 +932,18 @@ export function MentorDashboardPage() {
           Upcoming sessions are active. Past sessions stay here so you can attach recordings and
           manage links — they show as completed, not as open seats.
         </p>
+        {courseRecordingGroups.length > 0 && (
+          <div className="stack">
+            {courseRecordingGroups.map(({ course, items }) => (
+              <RecordingsCarousel
+                key={course.id}
+                items={items}
+                heading={`${course.title} recordings`}
+                framed={false}
+              />
+            ))}
+          </div>
+        )}
         {mySlots.length === 0 ? (
           <div className="empty">No sessions yet.</div>
         ) : (
@@ -890,10 +956,9 @@ export function MentorDashboardPage() {
             ) : (
               <MentorSlotsTable
                 slots={upcomingSlots}
-                today={today}
                 linkDrafts={linkDrafts}
                 setLinkDrafts={setLinkDrafts}
-                onSaveLink={(id) => void saveSessionLink(id)}
+                onSaveLink={(id) => void saveSessionLink(id, 'upcoming')}
                 onMarkBooked={(id) => void markBooked(id)}
                 onCancel={(s) => void cancelSession(s)}
                 mode="upcoming"
@@ -908,10 +973,9 @@ export function MentorDashboardPage() {
             ) : (
               <MentorSlotsTable
                 slots={pastSlots}
-                today={today}
                 linkDrafts={linkDrafts}
                 setLinkDrafts={setLinkDrafts}
-                onSaveLink={(id) => void saveSessionLink(id)}
+                onSaveLink={(id) => void saveSessionLink(id, 'past')}
                 onMarkBooked={(id) => void markBooked(id)}
                 onCancel={(s) => void cancelSession(s)}
                 mode="past"
@@ -925,10 +989,9 @@ export function MentorDashboardPage() {
                 </h3>
                 <MentorSlotsTable
                   slots={cancelledSlots}
-                  today={today}
                   linkDrafts={linkDrafts}
                   setLinkDrafts={setLinkDrafts}
-                  onSaveLink={(id) => void saveSessionLink(id)}
+                  onSaveLink={(id) => void saveSessionLink(id, 'cancelled')}
                   onMarkBooked={(id) => void markBooked(id)}
                   onCancel={(s) => void cancelSession(s)}
                   mode="cancelled"
@@ -944,7 +1007,6 @@ export function MentorDashboardPage() {
 
 function MentorSlotsTable({
   slots,
-  today,
   linkDrafts,
   setLinkDrafts,
   onSaveLink,
@@ -953,7 +1015,6 @@ function MentorSlotsTable({
   mode,
 }: {
   slots: AvailabilitySlot[]
-  today: string
   linkDrafts: Record<string, string>
   setLinkDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>
   onSaveLink: (id: string) => void
@@ -970,7 +1031,7 @@ function MentorSlotsTable({
             <th>Topic</th>
             <th>Course</th>
             <th>Status</th>
-            <th>Link</th>
+            <th>{mode === 'past' ? 'Recording' : 'Join link'}</th>
             <th />
           </tr>
         </thead>
@@ -989,7 +1050,7 @@ function MentorSlotsTable({
                 )}
               </td>
               <td>
-                <StatusPill status={displaySlotStatus(s.status, s.session_date, today)} />
+                <StatusPill status={s.status} sessionDate={s.session_date} />
               </td>
               <td>
                 <input
@@ -998,7 +1059,7 @@ function MentorSlotsTable({
                     setLinkDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))
                   }
                   maxLength={500}
-                  placeholder="https://…"
+                  placeholder={mode === 'past' ? 'Recording URL' : 'Zoom / Meet URL'}
                   style={{ minWidth: '12rem' }}
                   disabled={mode === 'cancelled'}
                 />
@@ -1011,7 +1072,7 @@ function MentorSlotsTable({
                       className="btn btn-secondary"
                       onClick={() => onSaveLink(s.id)}
                     >
-                      Save link
+                      {mode === 'past' ? 'Save recording' : 'Save join link'}
                     </button>
                   )}
                   {mode === 'past' && s.status === 'open' && (

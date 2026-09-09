@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { EphemeralChat } from '@/components/EphemeralChat'
 import { PageBack } from '@/components/PageBack'
+import { RecordingsCarousel, recordingItemsFromSlots } from '@/components/RecordingsCarousel'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/hooks'
 import { useMessageInbox } from '@/lib/messageInbox'
+import { recordingOpenHref } from '@/lib/sessionLinks'
 import { formatSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { supabase } from '@/lib/supabase'
@@ -27,27 +29,14 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function isRecordingUrl(url: string) {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, '')
-    return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com')
-  } catch {
-    return /youtu\.be|youtube\.com/i.test(url)
-  }
-}
-
-function slotLinkLabel(url: string, past: boolean) {
-  if (isRecordingUrl(url)) return 'Watch Recording'
-  if (past) return 'Session link'
-  return 'Join link'
-}
-
 function slotLine(
   slot: AvailabilitySlot | null | undefined,
   opts?: { mentorLabel?: string; past?: boolean },
 ) {
   if (!slot) return null
   const past = opts?.past ?? slot.session_date < todayIso()
+  const recording = slot.recording_url?.trim()
+  const join = slot.meeting_url?.trim()
   return (
     <>
       <strong>{formatDate(slot.session_date)}</strong>
@@ -55,21 +44,24 @@ function slotLine(
       {' — '}
       {formatSlotTopics(slot, 'Session')}
       {opts?.mentorLabel ? ` · ${opts.mentorLabel}` : ''}
-      {slot.meeting_url && (
+      {!past && join ? (
         <>
           {' · '}
-          <a href={slot.meeting_url} rel="noopener noreferrer">
-            {slotLinkLabel(slot.meeting_url, past)}
+          <a href={join} rel="noopener noreferrer">
+            Join
           </a>
         </>
-      )}
+      ) : null}
+      {past && recording ? (
+        <>
+          {' · '}
+          <a href={recordingOpenHref(recording)} rel="noopener noreferrer" target="_blank">
+            Open recording
+          </a>
+        </>
+      ) : null}
     </>
   )
-}
-
-function pastSessionStatus(status: string) {
-  if (status === 'cancelled') return 'cancelled'
-  return 'completed'
 }
 
 export function StudentMySessionsPage() {
@@ -289,6 +281,13 @@ export function StudentMySessionsPage() {
     upcomingAttending[0]?.availability_slots?.profiles?.display_name ??
     bookings[0]?.availability_slots?.profiles?.display_name
 
+  const standaloneRecordingItems = useMemo(() => {
+    const standalone = bookings
+      .map((b) => b.availability_slots)
+      .filter((s): s is AvailabilitySlot => Boolean(s && !s.course_id && s.session_date < today))
+    return recordingItemsFromSlots(standalone, { sort: 'desc' })
+  }, [bookings, today])
+
   return (
     <section className="section">
       <PageBack to="/" label="Back to home" />
@@ -310,6 +309,10 @@ export function StudentMySessionsPage() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      {!loading && standaloneRecordingItems.length > 0 && (
+        <RecordingsCarousel items={standaloneRecordingItems} heading="Standalone recordings" />
+      )}
 
       {!hasAny && !loading && (
         <div className="callout callout-warn" style={{ marginTop: '1rem' }}>
@@ -346,16 +349,24 @@ export function StudentMySessionsPage() {
                       No sessions linked yet.
                     </p>
                   ) : (
-                    <ul className="schedule-list">
-                      {sessions.map((slot) => (
-                        <li key={slot.id}>
-                          {slotLine(slot, {
-                            mentorLabel: slot.profiles?.display_name ?? 'Mentor',
-                            past: slot.session_date < today,
-                          })}
-                        </li>
-                      ))}
-                    </ul>
+                    <>
+                      <RecordingsCarousel
+                        items={recordingItemsFromSlots(sessions)}
+                        heading={`${course.title} recordings`}
+                        framed={false}
+                        emptyLabel="No recordings linked yet."
+                      />
+                      <ul className="schedule-list">
+                        {sessions.map((slot) => (
+                          <li key={slot.id}>
+                            {slotLine(slot, {
+                              mentorLabel: slot.profiles?.display_name ?? 'Mentor',
+                              past: slot.session_date < today,
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
                   )}
                 </article>
               ))}
@@ -440,25 +451,33 @@ export function StudentMySessionsPage() {
             </p>
             {tutoringByCourse.size > 0 && (
               <div className="stack">
-                {[...tutoringByCourse.values()].map(({ course, sessions }) => (
-                  <article key={course.id} className="card" style={{ boxShadow: 'none' }}>
-                    <h3 style={{ margin: '0 0 0.35rem' }}>
-                      <Link to={coursePath(course.subject_slug, course.slug)}>{course.title}</Link>
-                    </h3>
-                    <ul className="schedule-list">
-                      {sessions
-                        .slice()
-                        .sort((a, b) => a.session_date.localeCompare(b.session_date))
-                        .map((s) => (
+                {[...tutoringByCourse.values()].map(({ course, sessions }) => {
+                  const ordered = sessions
+                    .slice()
+                    .sort((a, b) => a.session_date.localeCompare(b.session_date))
+                  return (
+                    <article key={course.id} className="card" style={{ boxShadow: 'none' }}>
+                      <h3 style={{ margin: '0 0 0.35rem' }}>
+                        <Link to={coursePath(course.subject_slug, course.slug)}>{course.title}</Link>
+                      </h3>
+                      <RecordingsCarousel
+                        items={recordingItemsFromSlots(ordered)}
+                        heading={`${course.title} recordings`}
+                        framed={false}
+                        emptyLabel="No recordings linked yet."
+                      />
+                      <ul className="schedule-list">
+                        {ordered.map((s) => (
                           <li key={s.id}>
                             {slotLine(s, { past: s.session_date < today })}
                             {' · '}
-                            <StatusPill status={pastSessionStatus(s.status)} />
+                            <StatusPill status={s.status} sessionDate={s.session_date} />
                           </li>
                         ))}
-                    </ul>
-                  </article>
-                ))}
+                      </ul>
+                    </article>
+                  )
+                })}
               </div>
             )}
             {upcomingTutoring.length === 0 && pastTutoring.length === 0 && tutoringByCourse.size === 0 ? (
@@ -484,7 +503,7 @@ export function StudentMySessionsPage() {
                         <li key={s.id}>
                           {slotLine(s, { past: false })}
                           {' · '}
-                          <StatusPill status={s.status} />
+                          <StatusPill status={s.status} sessionDate={s.session_date} />
                           {s.status !== 'cancelled' && (
                             <>
                               {' · '}
@@ -504,7 +523,7 @@ export function StudentMySessionsPage() {
                         <li key={s.id}>
                           {slotLine(s, { past: true })}
                           {' · '}
-                          <StatusPill status={pastSessionStatus(s.status)} />
+                          <StatusPill status={s.status} sessionDate={s.session_date} />
                         </li>
                       ))}
                     </ul>

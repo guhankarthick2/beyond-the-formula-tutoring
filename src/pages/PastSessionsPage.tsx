@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { PageBack } from '@/components/PageBack'
+import { SessionVideoPlayer } from '@/components/SessionVideoPlayer'
 import { useAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/hooks'
 import { formatSlotTopics, SLOT_TOPICS_EMBED, slotTopicNames } from '@/lib/sessionTopics'
@@ -154,7 +155,7 @@ export function PastSessionsPage() {
                   const topicNames = slotTopicNames(s)
                   const label = s.time_note || formatSlotTopics(s, 'Session')
                   const mentor = s.profiles?.display_name ?? 'Mentor'
-                  const hasRecording = Boolean(s.meeting_url?.trim())
+                  const hasRecording = Boolean(s.recording_url?.trim())
                   return (
                     <tr key={s.id}>
                       <td>{formatDate(s.session_date)}</td>
@@ -170,14 +171,10 @@ export function PastSessionsPage() {
                       <td>
                         {s.enrolled ? (
                           hasRecording ? (
-                            <a
-                              className="btn btn-secondary"
-                              href={s.meeting_url}
-                              rel="noopener noreferrer"
-                              target="_blank"
-                            >
-                              Watch recording
-                            </a>
+                            <SessionVideoPlayer
+                              url={s.recording_url}
+                              title={`${formatDate(s.session_date)} · ${label}`}
+                            />
                           ) : (
                             <span className="muted">Enrolled · artifacts coming soon</span>
                           )

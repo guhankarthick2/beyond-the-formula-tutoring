@@ -27,6 +27,25 @@ export function mentorBioExcerpt(bio: string, max = 160) {
   return `${t.slice(0, max - 1).trimEnd()}…`
 }
 
+export const MENTOR_NOTES_MAX = 8
+export const MENTOR_NOTE_MAX_LEN = 72
+export const MENTOR_NOTES_FIELD_MAX = 600
+
+/** One note per line; blank lines dropped; display capped at 8. */
+export function parseMentorNotes(raw: string): string[] {
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, MENTOR_NOTES_MAX)
+}
+
+/** Normalize editor text for storage (trim lines, drop blanks, length caps). */
+export function serializeMentorNotes(raw: string): string {
+  const notes = parseMentorNotes(raw).map((n) => n.slice(0, MENTOR_NOTE_MAX_LEN))
+  return notes.join('\n').slice(0, MENTOR_NOTES_FIELD_MAX)
+}
+
 export type MentorCardModel = Pick<
   PublicMentorProfile,
   'display_name' | 'mentor_slug' | 'mentor_bio' | 'mentor_focus'

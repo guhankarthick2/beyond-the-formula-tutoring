@@ -15,6 +15,7 @@ export interface Profile {
   mentor_slug?: string | null
   mentor_bio?: string
   mentor_focus?: string
+  mentor_notes?: string
   mentor_public?: boolean
   created_at: string
   updated_at: string
@@ -26,6 +27,7 @@ export interface PublicMentorProfile {
   mentor_slug: string
   mentor_bio: string
   mentor_focus: string
+  mentor_notes?: string
   session_count?: number
 }
 
@@ -76,6 +78,7 @@ export interface AvailabilitySlot {
   session_date: string
   time_note: string
   meeting_url: string
+  recording_url: string
   status: SlotStatus
   created_at: string
   course_id?: string | null

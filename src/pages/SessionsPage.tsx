@@ -183,7 +183,7 @@ function SessionsContent({ subject }: { subject?: ReturnType<typeof getSubject> 
                   <td>
                     {formatDate(slot.session_date)}
                     <div>
-                      <StatusPill status={slot.status} />
+                      <StatusPill status={slot.status} sessionDate={slot.session_date} />
                     </div>
                   </td>
                   <td>{formatSlotTopics(slot)}</td>

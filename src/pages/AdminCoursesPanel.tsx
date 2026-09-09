@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { StatusPill } from '@/components/StatusPill'
+import { RecordingsCarousel, recordingItemsFromSlots } from '@/components/RecordingsCarousel'
 import { courseFlyerUrl, coursePath, slugifyCourseTitle } from '@/lib/courses'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
@@ -12,12 +13,6 @@ type Props = {
   tutors: Profile[]
   flash: (message: string) => void
   setError: (message: string | null) => void
-}
-
-function displaySlotStatus(status: string, sessionDate: string, today: string) {
-  if (status === 'cancelled') return 'cancelled'
-  if (sessionDate <= today) return 'completed'
-  return status
 }
 
 const emptyForm = {
@@ -44,6 +39,7 @@ export function AdminCoursesPanel({ tutors, flash, setError }: Props) {
   const [slotDate, setSlotDate] = useState('')
   const [slotTime, setSlotTime] = useState('')
   const [slotUrl, setSlotUrl] = useState('')
+  const [slotRecordingUrl, setSlotRecordingUrl] = useState('')
   const [slotTutorId, setSlotTutorId] = useState('')
   const [slotTopicIds, setSlotTopicIds] = useState<string[]>([])
   const [slotStatus, setSlotStatus] = useState<'open' | 'booked'>('booked')
@@ -319,6 +315,7 @@ export function AdminCoursesPanel({ tutors, flash, setError }: Props) {
     setSlotDate('')
     setSlotTime('')
     setSlotUrl('')
+    setSlotRecordingUrl('')
     setSlotTutorId(tutors[0]?.id ?? '')
     setSlotTopicIds([])
     setSlotStatus('booked')
@@ -328,7 +325,8 @@ export function AdminCoursesPanel({ tutors, flash, setError }: Props) {
     setEditingSlotId(s.id)
     setSlotDate(s.session_date)
     setSlotTime(s.time_note)
-    setSlotUrl(s.meeting_url)
+    setSlotUrl(s.meeting_url ?? '')
+    setSlotRecordingUrl(s.recording_url ?? '')
     setSlotTutorId(s.tutor_id)
     setSlotTopicIds((s.slot_topics ?? []).map((t) => t.topic_id))
     setSlotStatus(s.status === 'open' ? 'open' : 'booked')
@@ -343,6 +341,7 @@ export function AdminCoursesPanel({ tutors, flash, setError }: Props) {
       session_date: slotDate,
       time_note: slotTime.trim(),
       meeting_url: slotUrl.trim(),
+      recording_url: slotRecordingUrl.trim(),
       status: slotStatus,
       course_id: selectedId,
       subject_slug: form.subject_slug || 'precal',
@@ -382,7 +381,6 @@ export function AdminCoursesPanel({ tutors, flash, setError }: Props) {
   }
 
   const flyer = courseFlyerUrl(selected?.flyer_path)
-  const today = new Date().toISOString().slice(0, 10)
 
   return (
     <div className="stack">
@@ -599,13 +597,19 @@ export function AdminCoursesPanel({ tutors, flash, setError }: Props) {
               <div className="empty">No sessions linked yet.</div>
             ) : (
               <div className="stack">
+                <RecordingsCarousel
+                  items={recordingItemsFromSlots(courseSlots)}
+                  heading="Course recordings preview"
+                  framed={false}
+                  emptyLabel="No recording URLs on sessions yet."
+                />
                 {courseSlots.map((s) => (
                   <article key={s.id} className="card" style={{ boxShadow: 'none' }}>
                     <p style={{ margin: '0 0 0.35rem' }}>
                       <strong>{formatDate(s.session_date)}</strong>
                       {s.time_note ? ` · ${s.time_note}` : ''} — {formatSlotTopics(s, 'Session')} ·{' '}
                       {s.profiles?.display_name ?? 'Mentor'} ·{' '}
-                      <StatusPill status={displaySlotStatus(s.status, s.session_date, today)} />
+                      <StatusPill status={s.status} sessionDate={s.session_date} />
                     </p>
                     <div className="split-actions">
                       <button type="button" className="btn btn-secondary" onClick={() => editSlot(s)}>
@@ -666,14 +670,26 @@ export function AdminCoursesPanel({ tutors, flash, setError }: Props) {
               />
             </label>
             <label>
-              Meeting / recording URL
+              Join link (upcoming only)
               <input
                 maxLength={500}
                 value={slotUrl}
                 onChange={(e) => setSlotUrl(e.target.value)}
-                placeholder="https://…"
+                placeholder="https://zoom.us/…"
               />
             </label>
+            <label>
+              Recording URL
+              <input
+                maxLength={500}
+                value={slotRecordingUrl}
+                onChange={(e) => setSlotRecordingUrl(e.target.value)}
+                placeholder="https://youtube.com/… or other recording link"
+              />
+            </label>
+            <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+              Past/course unlock UIs show recording only. YouTube embeds; other URLs open externally.
+            </p>
             <label>
               Status
               <select

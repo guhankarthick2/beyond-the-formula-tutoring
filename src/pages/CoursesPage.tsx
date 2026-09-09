@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { PageBack } from '@/components/PageBack'
+import { RecordingsCarousel, recordingItemsFromSlots } from '@/components/RecordingsCarousel'
 import { StatusPill } from '@/components/StatusPill'
 import { useAuth } from '@/lib/auth'
 import { courseFlyerUrl, coursePath } from '@/lib/courses'
@@ -120,7 +121,7 @@ export function CoursesListPage() {
 export function CourseDetailPage() {
   const { subjectSlug, courseSlug } = useParams<{ subjectSlug: string; courseSlug: string }>()
   const subject = getSubject(subjectSlug)
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const [course, setCourse] = useState<Course | null>(null)
   const [slots, setSlots] = useState<AvailabilitySlot[]>([])
   const [mentors, setMentors] = useState<CourseMentorDir[]>([])
@@ -242,6 +243,23 @@ export function CourseDetailPage() {
   const flyer = courseFlyerUrl(course.flyer_path)
   const listPath = `/students/${subject.slug}/courses`
   const authNext = `/auth?next=${encodeURIComponent(coursePath(subject.slug, course.slug))}`
+  const isCourseCollaborator = Boolean(
+    user && mentors.some((m) => m.mentor_id === user.id),
+  )
+  const leadsAnySession = Boolean(user && slots.some((s) => s.tutor_id === user.id))
+  const canSeeAllRecordings = enrolled || isAdmin || isCourseCollaborator
+  const unlockedRecordingSlots = canSeeAllRecordings
+    ? slots
+    : slots.filter((s) => user && s.tutor_id === user.id)
+  const allRecordingItems = recordingItemsFromSlots(slots)
+  const unlockedRecordingItems = recordingItemsFromSlots(unlockedRecordingSlots)
+  const staffUnlocked = isAdmin || isCourseCollaborator || leadsAnySession
+  const lockPlayback = allRecordingItems.length > 0 && unlockedRecordingItems.length === 0
+
+  function recordingUnlocked(slot: AvailabilitySlot) {
+    if (canSeeAllRecordings) return true
+    return Boolean(user && slot.tutor_id === user.id)
+  }
 
   return (
     <section className="section">
@@ -257,6 +275,15 @@ export function CourseDetailPage() {
         <div className="badge-row">
           <span className="badge badge-blue">{subject.name}</span>
           {enrolled && <span className="badge badge-green">Enrolled</span>}
+          {!enrolled && staffUnlocked && (
+            <span className="badge badge-violet">
+              {isAdmin
+                ? 'Admin access'
+                : isCourseCollaborator
+                  ? 'Course mentor access'
+                  : 'Your sessions unlocked'}
+            </span>
+          )}
         </div>
         <h1 className="page-title">{course.title}</h1>
         {course.summary && (
@@ -294,17 +321,50 @@ export function CourseDetailPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {info && <div className="alert alert-ok">{info}</div>}
 
-      <div className="card stack" style={{ marginTop: '1rem', marginBottom: '1.25rem' }}>
+      {allRecordingItems.length > 0 && (
+        <div style={{ marginTop: '1rem', marginBottom: '1.25rem' }}>
+          <RecordingsCarousel
+            items={lockPlayback ? allRecordingItems : unlockedRecordingItems}
+            heading={
+              canSeeAllRecordings
+                ? 'Course recordings'
+                : unlockedRecordingItems.length > 0
+                  ? 'Your session recordings'
+                  : 'Course recordings'
+            }
+            lockPlayback={lockPlayback}
+            unlockHref={!user ? authNext : '#enroll'}
+            unlockLabel={!user ? 'Sign in to play' : 'Enroll to play'}
+          />
+        </div>
+      )}
+
+      <div id="enroll" className="card stack" style={{ marginTop: '1rem', marginBottom: '1.25rem' }}>
         <h2 style={{ margin: 0 }}>Enroll</h2>
-        <p className="muted" style={{ margin: 0 }}>
-          One enrollment unlocks every session in this course (recordings and artifacts), including
-          past sessions if you join mid-program. They also appear under My sessions.
-        </p>
+        {staffUnlocked && !enrolled ? (
+          <p className="muted" style={{ margin: 0 }}>
+            {isAdmin
+              ? 'Admins can open all course recordings without enrolling.'
+              : isCourseCollaborator
+                ? 'You are a mentor on this course, so all recordings are unlocked without enrolling.'
+                : 'You led session(s) in this course, so those recordings are unlocked without enrolling.'}{' '}
+            Enroll only if you want the full course listed under your student sessions.
+          </p>
+        ) : (
+          <p className="muted" style={{ margin: 0 }}>
+            One enrollment unlocks every session in this course (recordings and artifacts), including
+            past sessions if you join mid-program. They also appear under My sessions.
+          </p>
+        )}
         {enrolled ? (
           <p style={{ margin: 0 }}>
             You are enrolled.{' '}
             <Link to="/students/my-sessions">Open My sessions</Link>
           </p>
+        ) : user && staffUnlocked ? (
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void enroll()}>
+            {busy ? 'Enrolling…' : 'Enroll as student (optional)'}
+          </button>
         ) : user ? (
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void enroll()}>
             {busy ? 'Enrolling…' : 'Enroll in course'}
@@ -334,15 +394,16 @@ export function CourseDetailPage() {
                 <th>Session</th>
                 <th>Mentor</th>
                 <th>Status</th>
-                <th>Access</th>
+                <th>Recording</th>
               </tr>
             </thead>
             <tbody>
               {slots.map((s) => {
-                const hasRecording = Boolean(s.meeting_url?.trim())
+                const hasRecording = Boolean(s.recording_url?.trim())
                 const lead = mentors.find((m) => m.mentor_id === s.tutor_id)
                 const mentorLabel = s.profiles?.display_name ?? lead?.display_name ?? 'Mentor'
                 const mentorSlug = lead?.is_public ? lead.mentor_slug : null
+                const unlocked = recordingUnlocked(s)
                 return (
                   <tr key={s.id}>
                     <td>{formatDate(s.session_date)}</td>
@@ -357,20 +418,13 @@ export function CourseDetailPage() {
                       )}
                     </td>
                     <td>
-                      <StatusPill status={s.status} />
+                      <StatusPill status={s.status} sessionDate={s.session_date} />
                     </td>
                     <td>
-                      {enrolled && hasRecording ? (
-                        <a
-                          className="btn btn-secondary"
-                          href={s.meeting_url}
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          Open link
-                        </a>
-                      ) : enrolled ? (
-                        <span className="muted">Enrolled</span>
+                      {unlocked && hasRecording ? (
+                        <span className="muted">See recordings above</span>
+                      ) : unlocked ? (
+                        <span className="muted">Coming soon</span>
                       ) : (
                         <span className="muted">Enroll to unlock</span>
                       )}

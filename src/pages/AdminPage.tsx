@@ -7,6 +7,7 @@ import { useAdminReportsInbox } from '@/lib/adminReportsInbox'
 import { formatDate, useTopics } from '@/lib/hooks'
 import { catalogRecordings, SUBJECTS } from '@/lib/subjects'
 import { meetingUrlsConflict } from '@/lib/sessionLinks'
+import { MENTOR_NOTES_FIELD_MAX, serializeMentorNotes } from '@/lib/mentors'
 import { formatSlotTopics, replaceSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -83,7 +84,7 @@ export function AdminPage() {
           !r.href ||
           !attributedSlots.some(
             (s) =>
-              s.id !== editingSlotId && meetingUrlsConflict(r.href!, s.meeting_url),
+              s.id !== editingSlotId && meetingUrlsConflict(r.href!, s.recording_url ?? ''),
           ),
       ),
     [recordings, attributedSlots, editingSlotId],
@@ -98,6 +99,7 @@ export function AdminPage() {
   const [mentorSlug, setMentorSlug] = useState('')
   const [mentorBio, setMentorBio] = useState('')
   const [mentorFocus, setMentorFocus] = useState('')
+  const [mentorNotes, setMentorNotes] = useState('')
   const [mentorPublic, setMentorPublic] = useState(false)
 
   const load = useCallback(async () => {
@@ -250,6 +252,7 @@ export function AdminPage() {
       p_mentor_bio: mentorBio,
       p_mentor_focus: mentorFocus,
       p_mentor_public: mentorPublic,
+      p_mentor_notes: serializeMentorNotes(mentorNotes),
     })
     if (err) setError(err.message)
     else {
@@ -519,7 +522,7 @@ export function AdminPage() {
     const url = attrUrl.trim()
     if (url) {
       const dup = attributedSlots.find(
-        (s) => s.id !== editingSlotId && meetingUrlsConflict(url, s.meeting_url),
+        (s) => s.id !== editingSlotId && meetingUrlsConflict(url, s.recording_url ?? ''),
       )
       if (dup) {
         setError(
@@ -534,7 +537,7 @@ export function AdminPage() {
       session_date: attrDate,
       subject_slug: attrSubject,
       time_note: attrTimeNote.trim(),
-      meeting_url: url,
+      recording_url: url,
       status: 'booked' as const,
     }
 
@@ -547,7 +550,7 @@ export function AdminPage() {
       if (err) {
         setError(
           err.message.includes('already attributed')
-            ? 'That recording or meeting link is already used on another past session.'
+            ? 'That recording link is already used on another past session.'
             : err.message,
         )
         return
@@ -555,13 +558,13 @@ export function AdminPage() {
     } else {
       const { data, error: err } = await supabase
         .from('availability_slots')
-        .insert(payload)
+        .insert({ ...payload, meeting_url: '' })
         .select('id')
         .single()
       if (err) {
         setError(
           err.message.includes('already attributed')
-            ? 'That recording or meeting link is already used on another past session.'
+            ? 'That recording link is already used on another past session.'
             : err.message,
         )
         return
@@ -608,7 +611,7 @@ export function AdminPage() {
     setAttrDate(slot.session_date)
     setAttrSubject(slot.subject_slug || 'precal')
     setAttrTimeNote(slot.time_note ?? '')
-    setAttrUrl(slot.meeting_url ?? '')
+    setAttrUrl(slot.recording_url ?? '')
     setAttrRecordingKey('')
     setAttrTopicIds((slot.slot_topics ?? []).map((r) => r.topic_id))
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -795,6 +798,7 @@ export function AdminPage() {
                         setMentorSlug(p.mentor_slug ?? '')
                         setMentorBio(p.mentor_bio ?? '')
                         setMentorFocus(p.mentor_focus ?? '')
+                        setMentorNotes(p.mentor_notes ?? '')
                         setMentorPublic(Boolean(p.mentor_public))
                       }}
                     >
@@ -862,6 +866,19 @@ export function AdminPage() {
                   value={mentorBio}
                   onChange={(e) => setMentorBio(e.target.value)}
                 />
+              </label>
+              <label>
+                Highlights (one per line)
+                <textarea
+                  maxLength={MENTOR_NOTES_FIELD_MAX}
+                  rows={5}
+                  value={mentorNotes}
+                  onChange={(e) => setMentorNotes(e.target.value)}
+                  placeholder={'Founder — Beyond The Formula\nJunior — Plano West Senior High'}
+                />
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  Short notes beside the bio (up to 8 lines, ~72 characters each).
+                </span>
               </label>
               <label className="checkbox-row">
                 <input
@@ -1249,14 +1266,18 @@ export function AdminPage() {
                 />
               </label>
               <label>
-                Recording or meeting URL
+                Recording URL
                 <input
                   value={attrUrl}
                   onChange={(e) => setAttrUrl(e.target.value)}
                   maxLength={500}
-                  placeholder="https://…"
+                  placeholder="https://youtube.com/… or other recording link"
                 />
               </label>
+              <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+                YouTube embeds on My sessions; other links open externally. No join link on past
+                sessions.
+              </p>
               <div className="split-actions">
                 <button className="btn btn-primary" type="submit" disabled={!selectedMentorId}>
                   {editingSlotId ? 'Save changes' : 'Add past session'}
@@ -1298,8 +1319,8 @@ export function AdminPage() {
                         <td>{s.profiles?.display_name ?? '—'}</td>
                         <td>{s.time_note || formatSlotTopics(s, 'Session')}</td>
                         <td>
-                          {s.meeting_url ? (
-                            <a href={s.meeting_url} rel="noopener noreferrer">
+                          {s.recording_url ? (
+                            <a href={s.recording_url} rel="noopener noreferrer">
                               Open
                             </a>
                           ) : (

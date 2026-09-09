@@ -63,10 +63,10 @@ export function HomePage() {
         <p className="hero-tagline">Math is beyond the formula.</p>
         <p>
           <strong>Beyond The Formula</strong> is a free nonprofit tutoring app for math and STEM.
-          Our purpose is to help students build real understanding through live sessions with
-          volunteer mentors, open practice resources, past sessions (sign in to unlock recordings),
-          and a supportive community — not just memorizing formulas. Anyone can browse the student
-          hub without signing in. Sign in to enroll in live or past sessions.
+          Our purpose is to help students build real understanding through courses and bootcamps,
+          live help with volunteer mentors, past-session recordings, open questions, and free
+          practice resources — not just memorizing formulas. Anyone can browse the student hub
+          without signing in. Sign in to enroll and unlock recordings.
         </p>
         <div className="btn-group">
           <Link className="btn btn-primary" to="/students">
@@ -126,26 +126,20 @@ export function HomePage() {
         <h2 id="paths-heading">Two paths, one mission</h2>
         <div className="card-grid cols-2">
           <article className="card card-accent card-student">
-            <span className="card-icon" aria-hidden>
-              📚
-            </span>
             <h3>I am a student</h3>
             <p>
-              Browse resources, unit tests, and upcoming sessions — no login required. Enroll in a
-              session to unlock your personal schedule and homework.
+              Choose a subject for courses and bootcamps, live or past sessions, open questions, and
+              free practice resources. Sign in when you are ready to enroll and unlock recordings.
             </p>
             <Link className="btn btn-primary" to="/students">
               Open Students
             </Link>
           </article>
           <article className="card card-accent card-mentor">
-            <span className="card-icon" aria-hidden>
-              🌱
-            </span>
             <h3>I am a mentor</h3>
             <p>
-              Submit an interest form for review. Once onboarded, create sessions, add students,
-              assign homework, and reach out directly.
+              Apply to volunteer. Once approved, publish sessions, join courses, answer open
+              questions, and support students from Workspace.
             </p>
             <Link className="btn btn-secondary" to="/mentors/join">
               Become a mentor
@@ -155,45 +149,63 @@ export function HomePage() {
       </section>
 
       <section className="section" aria-labelledby="offer-heading">
-        <h2 id="offer-heading">What we offer</h2>
-        <div className="card-grid cols-3">
-          <article className="card">
-            <h3>Live sessions</h3>
+        <div className="section-head">
+          <h2 id="offer-heading">What you can do</h2>
+        </div>
+        <p className="lead">
+          Everything starts in the student hub. Pick a subject, then open courses, the schedule, past
+          sessions, questions, or resources from there.
+        </p>
+        <div className="card-grid cols-2">
+          <Link className="card home-offer-card" to="/students">
+            <h3>Courses &amp; bootcamps</h3>
             <p>
-              One-on-one help with volunteer mentors — homework, test prep, or concepts that feel
-              stuck.
+              Multi-session programs with enroll-once access to linked sessions and recordings when
+              mentors publish them.
             </p>
-          </article>
-          <article className="card">
-            <h3>Past sessions</h3>
+            <span className="home-offer-cta">Browse subjects →</span>
+          </Link>
+          <Link className="card home-offer-card" to="/students">
+            <h3>Live &amp; past sessions</h3>
             <p>
-              Browse completed classes and mentors for free. Sign in and enroll to unlock recordings
-              and other session artifacts.
+              Upcoming one-on-one or group help, plus completed sessions you can enroll in to unlock
+              recordings and homework.
             </p>
-          </article>
-          <article className="card">
+            <span className="home-offer-cta">Choose a subject →</span>
+          </Link>
+          <Link className="card home-offer-card" to="/students">
             <h3>Open questions</h3>
             <p>
-              Free-form help by subject (PreCal, SAT, and more). Mentors answer when they can — text
-              only, no photo uploads.
+              Ask by subject when you are stuck. Mentors reply in the thread — text only, no photo
+              uploads.
             </p>
-          </article>
+            <span className="home-offer-cta">Go to Students →</span>
+          </Link>
+          <Link className="card home-offer-card" to="/mentors">
+            <h3>Mentors</h3>
+            <p>
+              Meet volunteer mentors, read their bios, and see who is teaching. Apply if you want to
+              help.
+            </p>
+            <span className="home-offer-cta">Meet mentors →</span>
+          </Link>
         </div>
-      </section>
 
-      <section className="section">
-        <div className="callout callout-brand">
+        <div className="callout callout-brand" style={{ marginTop: '1.25rem' }}>
           <h2 style={{ margin: '0 0 0.5rem' }}>Ready to learn beyond the formula?</h2>
           <p className="muted" style={{ margin: 0 }}>
-            The student hub is open to all. Sign in when you want to enroll in a live or past session
-            and unlock recordings or homework.
+            Start at the student hub to pick a subject — you will see courses, schedules, and past
+            sessions that actually have content. Sign in when you want to enroll.
           </p>
           <div className="btn-group">
-            <Link className="btn btn-primary" to="/students/precal/schedule">
-              Browse live sessions
+            <Link className="btn btn-primary" to="/students">
+              Explore student hub
             </Link>
-            <Link className="btn btn-secondary" to="/students/precal/past">
-              Browse past sessions
+            <Link className="btn btn-secondary" to="/mentors">
+              Meet mentors
+            </Link>
+            <Link className="btn btn-ghost" to="/mentors/join">
+              Become a mentor
             </Link>
           </div>
         </div>

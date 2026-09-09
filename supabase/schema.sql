@@ -40,6 +40,7 @@ create table public.availability_slots (
   session_date date not null,
   time_note text not null default '' check (char_length(time_note) <= 120),
   meeting_url text not null default '' check (char_length(meeting_url) <= 500),
+  recording_url text not null default '' check (char_length(recording_url) <= 500),
   status public.slot_status not null default 'open',
   subject_slug text not null default 'precal'
     check (subject_slug in ('precal', 'sat', 'algebra', 'calculus')),
@@ -149,9 +150,9 @@ create index session_requests_open_idx on public.session_requests (preferred_dat
   where status = 'open';
 create index slot_topics_topic_idx on public.slot_topics (topic_id);
 
-create unique index availability_slots_meeting_url_unique
-  on public.availability_slots (meeting_url)
-  where meeting_url <> '';
+create unique index availability_slots_recording_url_unique
+  on public.availability_slots (recording_url)
+  where recording_url <> '';
 create index stuck_questions_topic_idx on public.stuck_questions (topic_id, created_at desc);
 create index stuck_questions_subject_idx on public.stuck_questions (subject_slug, created_at desc);
 create index courses_subject_status_idx
@@ -1174,29 +1175,29 @@ declare
   new_yt text;
   conflict_id uuid;
 begin
-  if new.meeting_url is null or btrim(new.meeting_url) = '' then
+  if new.recording_url is null or btrim(new.recording_url) = '' then
     return new;
   end if;
 
-  new_yt := public.youtube_video_id(new.meeting_url);
+  new_yt := public.youtube_video_id(new.recording_url);
 
   if new_yt is not null then
     select s.id into conflict_id
     from public.availability_slots s
     where s.id is distinct from new.id
-      and s.meeting_url <> ''
-      and public.youtube_video_id(s.meeting_url) = new_yt
+      and s.recording_url <> ''
+      and public.youtube_video_id(s.recording_url) = new_yt
     limit 1;
   else
     select s.id into conflict_id
     from public.availability_slots s
     where s.id is distinct from new.id
-      and lower(btrim(s.meeting_url)) = lower(btrim(new.meeting_url))
+      and lower(btrim(s.recording_url)) = lower(btrim(new.recording_url))
     limit 1;
   end if;
 
   if conflict_id is not null then
-    raise exception 'This recording or meeting link is already attributed to another session'
+    raise exception 'This recording link is already attributed to another session'
       using errcode = '23505';
   end if;
 
@@ -1206,8 +1207,22 @@ $$;
 
 drop trigger if exists availability_slots_unique_recording on public.availability_slots;
 create trigger availability_slots_unique_recording
-  before insert or update of meeting_url on public.availability_slots
+  before insert or update of recording_url on public.availability_slots
   for each row execute function public.enforce_unique_meeting_recording();
+
+create or replace function public.list_taken_recording_urls()
+returns setof text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select recording_url
+  from public.availability_slots
+  where recording_url <> '';
+$$;
+
+grant execute on function public.list_taken_recording_urls() to authenticated;
 
 create or replace function public.list_taken_meeting_urls()
 returns setof text
@@ -1216,9 +1231,9 @@ stable
 security definer
 set search_path = public
 as $$
-  select meeting_url
+  select recording_url
   from public.availability_slots
-  where meeting_url <> '';
+  where recording_url <> '';
 $$;
 
 grant execute on function public.list_taken_meeting_urls() to authenticated;
@@ -1336,3 +1351,117 @@ create policy "course_enrollments_insert_own"
 create policy "course_enrollments_admin_delete"
   on public.course_enrollments for delete to authenticated
   using (public.is_admin() or student_id = auth.uid());
+
+-- Mentor profile highlights (migration 022_mentor_notes.sql)
+alter table public.profiles
+  add column if not exists mentor_notes text not null default '';
+
+alter table public.profiles drop constraint if exists profiles_mentor_notes_len;
+alter table public.profiles
+  add constraint profiles_mentor_notes_len
+  check (char_length(mentor_notes) <= 600);
+
+drop view if exists public.public_mentor_profiles;
+create view public.public_mentor_profiles
+with (security_invoker = false)
+as
+select
+  p.id,
+  p.display_name,
+  p.mentor_slug,
+  p.mentor_bio,
+  p.mentor_focus,
+  p.mentor_notes,
+  (
+    select count(*)::int
+    from public.availability_slots s
+    where s.tutor_id = p.id
+      and s.status <> 'cancelled'
+  ) as session_count
+from public.profiles p
+where p.mentor_public = true
+  and p.tutor_status = 'approved'
+  and p.mentor_slug is not null;
+
+grant select on public.public_mentor_profiles to anon, authenticated;
+
+create or replace function public.protect_profile_columns()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if current_setting('app.allow_tutor_apply', true) = 'on' then
+    return new;
+  end if;
+  if public.is_admin() then
+    return new;
+  end if;
+  if auth.uid() is null then
+    return new;
+  end if;
+  if new.id <> auth.uid() then
+    raise exception 'Cannot update another profile';
+  end if;
+  if new.role is distinct from old.role
+     or new.tutor_status is distinct from old.tutor_status
+     or new.video_watched is distinct from old.video_watched
+     or new.expectations_accepted is distinct from old.expectations_accepted then
+    raise exception 'Use apply_as_tutor() or ask an admin to change tutor status';
+  end if;
+  if (
+    new.mentor_slug is distinct from old.mentor_slug
+    or new.mentor_bio is distinct from old.mentor_bio
+    or new.mentor_focus is distinct from old.mentor_focus
+    or new.mentor_notes is distinct from old.mentor_notes
+    or new.mentor_public is distinct from old.mentor_public
+  ) and not public.is_approved_tutor() then
+    raise exception 'Only approved mentors can edit public mentor profile fields';
+  end if;
+  if new.mentor_public = true and (new.mentor_slug is null or length(trim(new.mentor_slug)) < 2) then
+    raise exception 'Set a mentor slug before publishing your profile';
+  end if;
+  return new;
+end;
+$$;
+
+drop function if exists public.admin_set_mentor_profile(uuid, text, text, text, boolean);
+
+create or replace function public.admin_set_mentor_profile(
+  p_user_id uuid,
+  p_mentor_slug text,
+  p_mentor_bio text,
+  p_mentor_focus text,
+  p_mentor_public boolean,
+  p_mentor_notes text default ''
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  slug text;
+begin
+  if not public.is_admin() then
+    raise exception 'Admin only';
+  end if;
+
+  slug := nullif(trim(lower(p_mentor_slug)), '');
+  if p_mentor_public and slug is null then
+    raise exception 'Slug required to publish mentor profile';
+  end if;
+
+  update public.profiles
+  set
+    mentor_slug = slug,
+    mentor_bio = left(coalesce(p_mentor_bio, ''), 1200),
+    mentor_focus = left(coalesce(p_mentor_focus, ''), 160),
+    mentor_notes = left(coalesce(p_mentor_notes, ''), 600),
+    mentor_public = coalesce(p_mentor_public, false)
+  where id = p_user_id;
+end;
+$$;
+
+grant execute on function public.admin_set_mentor_profile(uuid, text, text, text, boolean, text) to authenticated;

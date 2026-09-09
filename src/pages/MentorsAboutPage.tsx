@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { MentorMonogram } from '@/components/MentorMonogram'
 import { PageBack } from '@/components/PageBack'
+import { RecordingsCarousel, recordingItemsFromSlots } from '@/components/RecordingsCarousel'
 import { StatusPill } from '@/components/StatusPill'
+import { useAuth } from '@/lib/auth'
 import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/contact'
 import { coursePath } from '@/lib/courses'
 import { formatDate } from '@/lib/hooks'
-import { mentorBioExcerpt, mentorProfilePath } from '@/lib/mentors'
+import { mentorBioExcerpt, mentorProfilePath, parseMentorNotes } from '@/lib/mentors'
 import { formatSlotTopics, SLOT_TOPICS_EMBED } from '@/lib/sessionTopics'
 import { usePageView } from '@/lib/stats'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
@@ -114,9 +116,12 @@ export function MentorsAboutPage() {
 
 export function MentorProfilePage() {
   const { slug } = useParams<{ slug: string }>()
+  const { user, isAdmin } = useAuth()
   const [mentor, setMentor] = useState<PublicMentorProfile | null>(null)
   const [courses, setCourses] = useState<Course[]>([])
   const [slots, setSlots] = useState<AvailabilitySlot[]>([])
+  const [bookedSlotIds, setBookedSlotIds] = useState<Set<string>>(new Set())
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -150,9 +155,7 @@ export function MentorProfilePage() {
       supabase.from('course_mentors').select('course_id, courses(*)').eq('mentor_id', mentorRow.id),
       supabase
         .from('availability_slots')
-        .select(
-          `*, ${SLOT_TOPICS_EMBED}, courses(id, title, slug, subject_slug)`,
-        )
+        .select(`*, ${SLOT_TOPICS_EMBED}, courses(id, title, slug, subject_slug)`)
         .eq('tutor_id', mentorRow.id)
         .neq('status', 'cancelled')
         .order('session_date', { ascending: false })
@@ -163,14 +166,79 @@ export function MentorProfilePage() {
       .map((row) => (Array.isArray(row.courses) ? row.courses[0] : row.courses))
       .filter((c): c is Course => Boolean(c && c.status === 'published'))
 
+    const slotList = (slotRows as AvailabilitySlot[]) ?? []
     setCourses(courseList)
-    setSlots((slotRows as AvailabilitySlot[]) ?? [])
+    setSlots(slotList)
+
+    if (user) {
+      const courseIds = [
+        ...new Set(
+          [
+            ...courseList.map((c) => c.id),
+            ...slotList.map((s) => s.course_id).filter(Boolean),
+          ] as string[],
+        ),
+      ]
+      const slotIds = slotList.map((s) => s.id)
+      const [bookingsRes, enrollRes] = await Promise.all([
+        slotIds.length
+          ? supabase
+              .from('bookings')
+              .select('slot_id')
+              .eq('student_id', user.id)
+              .in('slot_id', slotIds)
+          : Promise.resolve({ data: [] as { slot_id: string }[] }),
+        courseIds.length
+          ? supabase
+              .from('course_enrollments')
+              .select('course_id')
+              .eq('student_id', user.id)
+              .in('course_id', courseIds)
+          : Promise.resolve({ data: [] as { course_id: string }[] }),
+      ])
+      setBookedSlotIds(new Set((bookingsRes.data ?? []).map((b) => b.slot_id)))
+      setEnrolledCourseIds(new Set((enrollRes.data ?? []).map((e) => e.course_id)))
+    } else {
+      setBookedSlotIds(new Set())
+      setEnrolledCourseIds(new Set())
+    }
+
     setLoading(false)
-  }, [slug])
+  }, [slug, user])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  const recordingSlots = useMemo(
+    () => slots.filter((s) => Boolean(s.recording_url?.trim())),
+    [slots],
+  )
+  const recordingItems = useMemo(
+    () =>
+      recordingItemsFromSlots(
+        recordingSlots.map((s) => ({
+          ...s,
+          profiles: { display_name: mentor?.display_name ?? 'Mentor' },
+        })),
+        { sort: 'desc' },
+      ),
+    [recordingSlots, mentor?.display_name],
+  )
+
+  const isSelf = Boolean(user && mentor && user.id === mentor.id)
+  const canPlayAll = isAdmin || isSelf
+  const hasAnyUnlock = recordingSlots.some(
+    (s) =>
+      bookedSlotIds.has(s.id) || (s.course_id ? enrolledCourseIds.has(s.course_id) : false),
+  )
+  const lockPlayback = !canPlayAll && (!user || !hasAnyUnlock)
+  const authNext = `/auth?next=${encodeURIComponent(`/mentors/p/${slug ?? ''}`)}`
+  const unlockHref = !user
+    ? authNext
+    : courses[0]
+      ? coursePath(courses[0].subject_slug, courses[0].slug)
+      : '/students'
 
   if (!slug) return <Navigate to="/mentors" replace />
 
@@ -193,6 +261,7 @@ export function MentorProfilePage() {
 
   const standalone = slots.filter((s) => !s.course_id)
   const underCourse = slots.filter((s) => s.course_id)
+  const notes = parseMentorNotes(mentor.mentor_notes ?? '')
 
   return (
     <section className="section">
@@ -204,18 +273,57 @@ export function MentorProfilePage() {
           <h1 className="page-title" style={{ marginBottom: '0.35rem' }}>
             {mentor.display_name}
           </h1>
-          {mentor.mentor_focus && <p className="lead" style={{ margin: 0 }}>{mentor.mentor_focus}</p>}
+          {mentor.mentor_focus && (
+            <p className="lead" style={{ margin: 0 }}>
+              {mentor.mentor_focus}
+            </p>
+          )}
         </div>
       </div>
 
-      {mentor.mentor_bio ? (
-        <div className="card" style={{ whiteSpace: 'pre-wrap' }}>
-          {mentor.mentor_bio}
+      {mentor.mentor_bio || notes.length > 0 ? (
+        <div
+          className={
+            notes.length > 0 ? 'mentor-profile-intro' : 'mentor-profile-intro mentor-profile-intro--bio-only'
+          }
+        >
+          {mentor.mentor_bio ? (
+            <div className="mentor-profile-bio">{mentor.mentor_bio}</div>
+          ) : (
+            <p className="muted" style={{ margin: 0 }}>
+              This mentor has not added a longer bio yet.
+            </p>
+          )}
+          {notes.length > 0 && (
+            <aside className="mentor-profile-notes" aria-label="Highlights">
+              {notes.map((note, i) => (
+                <div
+                  key={`${i}-${note}`}
+                  className={`mentor-note mentor-note--${(i % 4) + 1}${i % 2 === 0 ? ' mentor-note--tilt-a' : ' mentor-note--tilt-b'}`}
+                >
+                  {note}
+                </div>
+              ))}
+            </aside>
+          )}
         </div>
       ) : (
-        <p className="muted">
+        <p className="muted" style={{ marginTop: '0.85rem' }}>
           This mentor has not added a longer bio yet.
         </p>
+      )}
+
+      {recordingItems.length > 0 && (
+        <div className="mentor-profile-recordings">
+          <RecordingsCarousel
+            items={recordingItems}
+            heading="Recordings"
+            lockPlayback={lockPlayback}
+            unlockHref={unlockHref}
+            unlockLabel={!user ? 'Sign in to play' : 'Enroll to play'}
+            lockStyle="banner"
+          />
+        </div>
       )}
 
       <div className="card stack">
@@ -255,7 +363,7 @@ export function MentorProfilePage() {
                       </Link>
                     </>
                   ) : null}{' '}
-                  <StatusPill status={s.status} />
+                  <StatusPill status={s.status} sessionDate={s.session_date} />
                 </li>
               ))}
             </ul>
@@ -269,7 +377,7 @@ export function MentorProfilePage() {
                 <li key={s.id}>
                   {formatDate(s.session_date)}
                   {s.time_note ? ` · ${s.time_note}` : ''} — {formatSlotTopics(s, 'Session')}{' '}
-                  <StatusPill status={s.status} />
+                  <StatusPill status={s.status} sessionDate={s.session_date} />
                 </li>
               ))}
             </ul>
