@@ -16,6 +16,7 @@ import type { AvailabilitySlot, Course, PublicMentorProfile } from '@/lib/types'
 
 export function MentorsAboutPage() {
   usePageView('/mentors')
+  const { isApprovedTutor } = useAuth()
   const [mentors, setMentors] = useState<PublicMentorProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,9 +58,15 @@ export function MentorsAboutPage() {
           sessions.
         </p>
         <div className="btn-group">
-          <Link className="btn btn-secondary" to="/mentors/join">
-            Become a mentor
-          </Link>
+          {isApprovedTutor ? (
+            <Link className="btn btn-secondary" to="/mentors/dashboard">
+              Open Workspace
+            </Link>
+          ) : (
+            <Link className="btn btn-secondary" to="/mentors/join">
+              Become a mentor
+            </Link>
+          )}
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '@/lib/auth'
 import { useImpactStats, usePageView } from '@/lib/stats'
 import { youtubeChannelUrl } from '@/lib/supabase'
 
@@ -50,6 +51,7 @@ function StatCard({
 export function HomePage() {
   usePageView('/')
   const { stats, demo } = useImpactStats()
+  const { isApprovedTutor } = useAuth()
 
   return (
     <>
@@ -72,9 +74,15 @@ export function HomePage() {
           <Link className="btn btn-primary" to="/students">
             Enter Students
           </Link>
-          <Link className="btn btn-secondary" to="/mentors/join">
-            Become a mentor
-          </Link>
+          {isApprovedTutor ? (
+            <Link className="btn btn-secondary" to="/mentors/dashboard">
+              Open Workspace
+            </Link>
+          ) : (
+            <Link className="btn btn-secondary" to="/mentors/join">
+              Become a mentor
+            </Link>
+          )}
           <a className="btn btn-ghost" href={youtubeChannelUrl} rel="noopener noreferrer">
             Watch lessons
           </a>
@@ -137,13 +145,27 @@ export function HomePage() {
           </article>
           <article className="card card-accent card-mentor">
             <h3>I am a mentor</h3>
-            <p>
-              Apply to volunteer. Once approved, publish sessions, join courses, answer open
-              questions, and support students from Workspace.
-            </p>
-            <Link className="btn btn-secondary" to="/mentors/join">
-              Become a mentor
-            </Link>
+            {isApprovedTutor ? (
+              <>
+                <p>
+                  Publish sessions, join courses, answer open questions, and support students from
+                  Workspace.
+                </p>
+                <Link className="btn btn-secondary" to="/mentors/dashboard">
+                  Open Workspace
+                </Link>
+              </>
+            ) : (
+              <>
+                <p>
+                  Apply to volunteer. Once approved, publish sessions, join courses, answer open
+                  questions, and support students from Workspace.
+                </p>
+                <Link className="btn btn-secondary" to="/mentors/join">
+                  Become a mentor
+                </Link>
+              </>
+            )}
           </article>
         </div>
       </section>
@@ -204,9 +226,15 @@ export function HomePage() {
             <Link className="btn btn-secondary" to="/mentors">
               Meet mentors
             </Link>
-            <Link className="btn btn-ghost" to="/mentors/join">
-              Become a mentor
-            </Link>
+            {isApprovedTutor ? (
+              <Link className="btn btn-ghost" to="/mentors/dashboard">
+                Open Workspace
+              </Link>
+            ) : (
+              <Link className="btn btn-ghost" to="/mentors/join">
+                Become a mentor
+              </Link>
+            )}
           </div>
         </div>
       </section>

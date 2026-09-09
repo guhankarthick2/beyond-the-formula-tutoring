@@ -178,8 +178,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <footer className="site-footer">
         <p>Beyond The Formula — free nonprofit math & STEM tutoring</p>
         <p className="footer-links">
-          <Link to="/mentors/join">Become a mentor</Link>
-          <span aria-hidden="true"> · </span>
+          {!isApprovedTutor && (
+            <>
+              <Link to="/mentors/join">Become a mentor</Link>
+              <span aria-hidden="true"> · </span>
+            </>
+          )}
           <Link to="/privacy">Privacy Policy</Link>
           <span aria-hidden="true"> · </span>
           <Link to="/terms">Terms of Service</Link>
