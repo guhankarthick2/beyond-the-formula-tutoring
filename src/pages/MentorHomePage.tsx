@@ -3,7 +3,7 @@ import { PageBack } from '@/components/PageBack'
 import { useAuth } from '@/lib/auth'
 import { MENTOR_INTEREST_FORM_URL } from '@/lib/contact'
 import { usePageView } from '@/lib/stats'
-import { supabase, volunteerIntroVideoUrl } from '@/lib/supabase'
+import { supabase, isYoutubeEmbedUrl, volunteerIntroVideoUrl } from '@/lib/supabase'
 import { useState } from 'react'
 
 export function MentorHomePage() {
@@ -89,14 +89,34 @@ export function MentorHomePage() {
         <div className="stack">
           <div className="card stack">
             <h2 style={{ margin: 0 }}>1. Watch the introduction</h2>
-            <div className="video-frame">
-              <iframe
-                src={volunteerIntroVideoUrl}
-                title="Mentor introduction video"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
+            {isYoutubeEmbedUrl(volunteerIntroVideoUrl) ? (
+              <div className="video-frame">
+                <iframe
+                  src={volunteerIntroVideoUrl}
+                  title="Mentor introduction video"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <div className="stack" style={{ gap: '0.75rem' }}>
+                <div className="video-frame">
+                  <iframe
+                    src={volunteerIntroVideoUrl}
+                    title="Mentor introduction video"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allowFullScreen
+                  />
+                </div>
+                <p className="muted" style={{ margin: 0 }}>
+                  If the player is blank,{' '}
+                  <a href={volunteerIntroVideoUrl} target="_blank" rel="noopener noreferrer">
+                    open the intro video
+                  </a>{' '}
+                  in a new tab, then return here.
+                </p>
+              </div>
+            )}
             <label className="checkbox-row">
               <input type="checkbox" checked={watched} onChange={(e) => setWatched(e.target.checked)} />
               <span>I watched the introduction video.</span>

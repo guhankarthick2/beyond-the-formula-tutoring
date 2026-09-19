@@ -31,6 +31,11 @@ export const youtubeChannelUrl =
   import.meta.env.VITE_YOUTUBE_CHANNEL_URL ||
   'https://www.youtube.com/@beyondtheformulatutoring'
 
+/** Mentor onboarding intro (YouTube embed or OneDrive / other iframe-friendly URL). */
 export const volunteerIntroVideoUrl =
   import.meta.env.VITE_VOLUNTEER_INTRO_VIDEO_URL ||
-  'https://www.youtube.com/embed/Y4476mBsJu0'
+  'https://1drv.ms/v/c/7d53c003ad212b97/IQDDriVzUUDwTq2fonebJsZtAb_0UA-byhQbIY5sTsABSNE?e=mFuTze'
+
+export function isYoutubeEmbedUrl(url: string) {
+  return /youtube\.com\/embed\//i.test(url) || /youtube-nocookie\.com\/embed\//i.test(url)
+}
