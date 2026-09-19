@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { PageBack } from '@/components/PageBack'
 import { useAuth } from '@/lib/auth'
+import { MENTOR_INTEREST_FORM_URL } from '@/lib/contact'
 import { usePageView } from '@/lib/stats'
 import { supabase, volunteerIntroVideoUrl } from '@/lib/supabase'
 import { useState } from 'react'
@@ -27,7 +28,7 @@ export function MentorHomePage() {
     }
     await refreshProfile()
     setMessage(
-      'Interest form submitted! An admin will review your application before you can access Workspace.',
+      'Application registered. Make sure you also completed the Google interest form — an admin will review before you can access Workspace.',
     )
   }
 
@@ -61,7 +62,7 @@ export function MentorHomePage() {
           <ol className="step-list">
             <li>Watch the introduction video</li>
             <li>Accept mentor expectations</li>
-            <li>Submit the interest form</li>
+            <li>Complete the Google interest form</li>
             <li>Admin reviews and approves</li>
             <li>Access Workspace</li>
           </ol>
@@ -123,14 +124,43 @@ export function MentorHomePage() {
 
           <div className="card stack">
             <h2 style={{ margin: 0 }}>3. Interest form</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Complete the mentor interest form, then register your application here so an admin can
+              review you.
+            </p>
+            {watched && accepted ? (
+              <a
+                className="btn btn-primary"
+                href={MENTOR_INTEREST_FORM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open mentor interest form
+              </a>
+            ) : (
+              <button type="button" className="btn btn-primary" disabled>
+                Open mentor interest form
+              </button>
+            )}
+            {(!watched || !accepted) && (
+              <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+                Finish steps 1 and 2 above to unlock the form.
+              </p>
+            )}
             {!user && (
               <p className="muted">
-                <Link to="/auth">Sign in</Link> with a display name first, then return here to apply.
+                <Link to="/auth">Sign in</Link> with a display name first, then return here to
+                register your application.
               </p>
             )}
             {user && profile?.tutor_status === 'pending' && (
               <div className="alert alert-warn">
-                Your application is pending review. An admin will approve you soon.
+                Your application is pending review. An admin will approve you soon. If you have not
+                finished the Google form yet,{' '}
+                <a href={MENTOR_INTEREST_FORM_URL} target="_blank" rel="noopener noreferrer">
+                  open it here
+                </a>
+                .
               </div>
             )}
             {user && profile?.tutor_status === 'rejected' && (
@@ -141,15 +171,16 @@ export function MentorHomePage() {
             {user && profile?.tutor_status !== 'pending' && profile?.tutor_status !== 'approved' && (
               <>
                 <p className="muted" style={{ margin: 0 }}>
-                  Signed in as <strong>{profile?.display_name}</strong>. Email stays private.
+                  Signed in as <strong>{profile?.display_name}</strong>. Email stays private. After
+                  you submit the Google form, register here:
                 </p>
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="btn btn-secondary"
                   disabled={!watched || !accepted || busy}
                   onClick={() => void apply()}
                 >
-                  {busy ? 'Submitting…' : 'Submit mentor interest form'}
+                  {busy ? 'Submitting…' : "I've completed the form — register my application"}
                 </button>
               </>
             )}
