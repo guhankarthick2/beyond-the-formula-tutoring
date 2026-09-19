@@ -27,7 +27,7 @@ const TESTIMONIALS = [
 const THANK_YOU_NOTE = {
   quote:
     'Thank you so much for teaching me Pre-Calculus throughout the summer. I really appreciate the time and effort put into helping me. Your explanations made every topic easy to understand. Thank you for giving up part of your summer to help me succeed.',
-  attribution: 'Dhanya D.',
+  attribution: 'Anonymous',
   detail: 'Precalculus summer student',
 } as const
 

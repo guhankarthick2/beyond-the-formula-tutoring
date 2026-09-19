@@ -861,7 +861,7 @@ export function AdminPage() {
               <label>
                 About (in their words)
                 <textarea
-                  maxLength={1200}
+                  maxLength={2500}
                   rows={6}
                   value={mentorBio}
                   onChange={(e) => setMentorBio(e.target.value)}

@@ -1456,7 +1456,7 @@ begin
   update public.profiles
   set
     mentor_slug = slug,
-    mentor_bio = left(coalesce(p_mentor_bio, ''), 1200),
+    mentor_bio = left(coalesce(p_mentor_bio, ''), 2500),
     mentor_focus = left(coalesce(p_mentor_focus, ''), 160),
     mentor_notes = left(coalesce(p_mentor_notes, ''), 600),
     mentor_public = coalesce(p_mentor_public, false)

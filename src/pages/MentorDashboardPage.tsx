@@ -523,7 +523,7 @@ export function MentorDashboardPage() {
         <label>
           About you
           <textarea
-            maxLength={1200}
+            maxLength={2500}
             rows={5}
             value={pubBio}
             onChange={(e) => setPubBio(e.target.value)}
