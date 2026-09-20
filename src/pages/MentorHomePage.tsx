@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useCallback, useState } from 'react'
+import { MentorIntroPlayer } from '@/components/MentorIntroPlayer'
 import { PageBack } from '@/components/PageBack'
 import { useAuth } from '@/lib/auth'
 import { MENTOR_INTEREST_FORM_URL } from '@/lib/contact'
 import { usePageView } from '@/lib/stats'
-import { supabase, isYoutubeEmbedUrl, volunteerIntroVideoUrl } from '@/lib/supabase'
-import { useState } from 'react'
+import { supabase, volunteerIntroVideoUrl } from '@/lib/supabase'
 
 export function MentorHomePage() {
   usePageView('/mentors/join')
@@ -14,6 +15,8 @@ export function MentorHomePage() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const markWatched = useCallback(() => setWatched(true), [])
 
   async function apply() {
     if (!user) return
@@ -60,7 +63,7 @@ export function MentorHomePage() {
         <article className="card">
           <h3>How onboarding works</h3>
           <ol className="step-list">
-            <li>Watch the introduction video</li>
+            <li>Watch the full introduction video</li>
             <li>Accept mentor expectations</li>
             <li>Complete the Google interest form</li>
             <li>Admin reviews and approves</li>
@@ -89,42 +92,24 @@ export function MentorHomePage() {
         <div className="stack">
           <div className="card stack">
             <h2 style={{ margin: 0 }}>1. Watch the introduction</h2>
-            {isYoutubeEmbedUrl(volunteerIntroVideoUrl) ? (
-              <div className="video-frame">
-                <iframe
-                  src={volunteerIntroVideoUrl}
-                  title="Mentor introduction video"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            ) : (
-              <div className="stack" style={{ gap: '0.75rem' }}>
-                <div className="video-frame">
-                  <iframe
-                    src={volunteerIntroVideoUrl}
-                    title="Mentor introduction video"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                    allowFullScreen
-                  />
-                </div>
-                <p className="muted" style={{ margin: 0 }}>
-                  If the player is blank,{' '}
-                  <a href={volunteerIntroVideoUrl} target="_blank" rel="noopener noreferrer">
-                    open the intro video
-                  </a>{' '}
-                  in a new tab, then return here.
-                </p>
-              </div>
-            )}
-            <label className="checkbox-row">
-              <input type="checkbox" checked={watched} onChange={(e) => setWatched(e.target.checked)} />
-              <span>I watched the introduction video.</span>
-            </label>
+            <MentorIntroPlayer
+              videoUrl={volunteerIntroVideoUrl}
+              completed={watched}
+              onCompleted={markWatched}
+            />
           </div>
 
-          <div className="card stack">
+          <div
+            className="card stack"
+            style={!watched ? { opacity: 0.55 } : undefined}
+            aria-disabled={!watched}
+          >
             <h2 style={{ margin: 0 }}>2. Expectations</h2>
+            {!watched && (
+              <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+                Finish watching the introduction video to unlock this step.
+              </p>
+            )}
             <ul className="muted" style={{ margin: 0, paddingLeft: '1.2rem' }}>
               <li>Be patient, respectful, and confidence-first with every student.</li>
               <li>Offer sessions only for topics you can teach well.</li>
@@ -136,6 +121,7 @@ export function MentorHomePage() {
               <input
                 type="checkbox"
                 checked={accepted}
+                disabled={!watched}
                 onChange={(e) => setAccepted(e.target.checked)}
               />
               <span>I agree to these expectations.</span>
@@ -164,7 +150,9 @@ export function MentorHomePage() {
             )}
             {(!watched || !accepted) && (
               <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Finish steps 1 and 2 above to unlock the form.
+                {!watched
+                  ? 'Finish watching the introduction video to unlock the form.'
+                  : 'Accept the mentor expectations above to unlock the form.'}
               </p>
             )}
             {!user && (

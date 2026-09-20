@@ -663,7 +663,8 @@ th {
   background: #0b1a14;
 }
 
-.video-frame iframe {
+.video-frame iframe,
+.video-frame > div {
   position: absolute;
   inset: 0;
   width: 100%;

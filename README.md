@@ -75,7 +75,7 @@ Fill in:
 |----------|--------|
 | `VITE_SUPABASE_URL` | Project Settings → API → Project URL |
 | `VITE_SUPABASE_ANON_KEY` | Project Settings → API → `anon` `public` key |
-| `VITE_VOLUNTEER_INTRO_VIDEO_URL` | Mentor intro video URL (YouTube **embed** or OneDrive share/embed). Must also be set as a GitHub Actions secret/variable — `.env` only affects local. |
+| `VITE_VOLUNTEER_INTRO_VIDEO_URL` | Mentor intro YouTube **embed** URL (e.g. `https://www.youtube.com/embed/VIDEO_ID`). Must also be set as a GitHub Actions secret/variable — `.env` only affects local. |
 | `VITE_YOUTUBE_CHANNEL_URL` | Your channel URL |
 
 ### 4. Run locally
