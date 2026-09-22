@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { GitHubMark, GoogleMark } from '@/components/AuthProviderMarks'
 import { useAuth } from '@/lib/auth'
+import { blockedSignupDomainMessage } from '@/lib/emailDomains'
 
 type AuthMode = 'signin' | 'register' | 'forgot' | 'recovery'
 
@@ -55,6 +56,8 @@ export function AuthPage() {
       return null
     }
   }, [searchParams])
+
+  const domainBlockMessage = useMemo(() => blockedSignupDomainMessage(email), [email])
 
   useEffect(() => {
     if (user && nextPath && mode !== 'recovery') {
@@ -114,6 +117,11 @@ export function AuthPage() {
     e.preventDefault()
     setError(null)
     setInfo(null)
+    const blocked = blockedSignupDomainMessage(email)
+    if (blocked) {
+      setError(blocked)
+      return
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match.')
       return
@@ -145,6 +153,11 @@ export function AuthPage() {
     e.preventDefault()
     setError(null)
     setInfo(null)
+    const blocked = blockedSignupDomainMessage(email)
+    if (blocked) {
+      setError(blocked)
+      return
+    }
     setBusy(true)
     const { error: err } = await resetPasswordForEmail(email)
     setBusy(false)
@@ -397,6 +410,11 @@ export function AuthPage() {
               autoComplete="email"
             />
           </label>
+          {domainBlockMessage && (
+            <div className="alert alert-warn" role="status">
+              {domainBlockMessage}
+            </div>
+          )}
           <label>
             Password
             <input
@@ -421,7 +439,11 @@ export function AuthPage() {
           </label>
           {error && <div className="alert alert-error">{error}</div>}
           {info && <div className="alert alert-ok">{info}</div>}
-          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={busy || !configured || !!domainBlockMessage}
+          >
             {busy ? 'Creating account…' : 'Create account'}
           </button>
         </form>
@@ -440,9 +462,18 @@ export function AuthPage() {
               autoComplete="email"
             />
           </label>
+          {domainBlockMessage && (
+            <div className="alert alert-warn" role="status">
+              {domainBlockMessage}
+            </div>
+          )}
           {error && <div className="alert alert-error">{error}</div>}
           {info && <div className="alert alert-ok">{info}</div>}
-          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={busy || !configured || !!domainBlockMessage}
+          >
             {busy ? 'Sending…' : 'Send reset link'}
           </button>
           <button className="btn btn-ghost" type="button" onClick={() => switchMode('signin')}>

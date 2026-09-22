@@ -26,6 +26,22 @@ ephemeral chat, and subject-scoped open Q&A (PreCal, SAT, and more).
 2. Turn **Confirm email** ON for new registrations
 3. Leave magic-link/OTP optional (the app uses password + Google / GitHub)
 
+#### Auth emails via Resend (SMTP) — required in production
+Supabase’s built-in mailer has low bounce tolerance and can revoke email privileges. Send confirm + password-reset mail through [Resend](https://resend.com) (same provider as Q&A notify):
+
+1. In Resend: verify `beyondtheformula.org` (SPF/DKIM) and create an API key
+2. Supabase → **Project Settings → Authentication → SMTP Settings** (or **Auth → Emails → SMTP**):
+   - Enable custom SMTP
+   - Host: `smtp.resend.com`
+   - Port: `465` (SSL) or `587`
+   - Username: `resend`
+   - Password: your Resend API key
+   - Sender email: `noreply@beyondtheformula.org` (must be on the verified domain)
+   - Sender name: `Beyond The Formula`
+3. Test signup to a normal inbox first
+
+Some school districts (e.g. `@mypisd.net`) still bounce outside mail. The register form warns and blocks those domains; students should use a personal email or **Continue with Google**. Add further domains in `src/lib/emailDomains.ts` when you learn of them — automatic bounce tracking is unnecessary at this scale.
+
 #### Google OAuth
 1. Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Web application)
 2. Authorized JavaScript origins: `http://localhost:3001` and `https://beyondtheformula.org`
