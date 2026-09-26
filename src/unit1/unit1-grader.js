@@ -3,21 +3,138 @@
  * Multipart items award full points at 100% parts correct, half points at 50%+.
  */
 ;(function (global) {
-  function normalizeText(value) {
-    return String(value ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .replace(/−/g, '-')
-  }
-
   function parseNumber(value) {
     if (value === null || value === undefined || value === '') return NaN
     const cleaned = String(value)
       .trim()
       .replace(/,/g, '')
-      .replace(/−/g, '-')
+      .replace(/[−–—]/g, '-')
+      .replace(/\s+/g, '')
+    const frac = cleaned.match(/^([+-]?\d+(?:\.\d+)?)\/([+-]?\d+(?:\.\d+)?)$/)
+    if (frac) {
+      const den = Number(frac[2])
+      if (den === 0) return NaN
+      return Number(frac[1]) / den
+    }
     return Number(cleaned)
+  }
+
+  function normalizeAnswerText(value) {
+    let s = String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[−–—]/g, '-')
+    s = s.replace(/∞/g, 'infinity')
+    s = s.replace(/positive\s*infinity/g, '+infinity')
+    s = s.replace(/negative\s*infinity/g, '-infinity')
+    s = s.replace(/\+\s*infinity/g, '+infinity')
+    s = s.replace(/-\s*infinity/g, '-infinity')
+    s = s.replace(/infinity/g, 'inf')
+    s = s.replace(/\binfty\b/g, 'inf')
+    s = s.replace(/²/g, '^2').replace(/³/g, '^3').replace(/⁴/g, '^4').replace(/⁵/g, '^5').replace(/⁶/g, '^6')
+    s = s.replace(/√/g, 'sqrt')
+    s = s.replace(/∪/g, 'u')
+    s = s.replace(/\\cup/g, 'u')
+    s = s.replace(/\s+/g, '')
+    s = s.replace(/[·*]/g, '')
+    s = s.replace(/^(?:f|g|h|p|q|r|s|c|v)\(x\)=/, '')
+    s = s.replace(/^c\(t\)=/, '')
+    s = s.replace(/^y=/, '')
+    if (s === 'inf') s = '+inf'
+    return s
+  }
+
+  function productKey(raw) {
+    const s = normalizeAnswerText(raw)
+    if (!s || s.includes(',') || s.includes('u') || s.includes('/') || s.includes('=')) return null
+    const factors = []
+    let i = 0
+    let depth = 0
+    let buf = ''
+    const flush = () => {
+      if (!buf) return
+      factors.push(buf)
+      buf = ''
+    }
+    while (i < s.length) {
+      const ch = s[i]
+      if (ch === '(') {
+        if (depth === 0 && buf && buf !== '+' && buf !== '-') flush()
+        depth += 1
+        buf += ch
+      } else if (ch === ')') {
+        if (depth === 0) return null
+        depth -= 1
+        buf += ch
+        if (depth === 0 && s[i + 1] === '^') {
+          buf += '^'
+          i += 2
+          let digits = ''
+          while (i < s.length && /[0-9]/.test(s[i])) {
+            digits += s[i]
+            i += 1
+          }
+          if (!digits) return null
+          buf += digits
+          i -= 1
+        }
+        if (depth === 0) flush()
+      } else if (
+        depth === 0 &&
+        (ch === '+' || ch === '-') &&
+        buf &&
+        /[0-9x)]/.test(buf[buf.length - 1])
+      ) {
+        return null
+      } else {
+        buf += ch
+      }
+      i += 1
+    }
+    if (depth !== 0) return null
+    flush()
+    if (!factors.some((f) => f.includes('x') || f.includes('sqrt'))) return null
+
+    let sign = 1
+    const pieces = []
+    for (const factor of factors) {
+      let term = factor
+      if (term.startsWith('+')) term = term.slice(1)
+      if (term.startsWith('-')) {
+        sign *= -1
+        term = term.slice(1)
+      }
+      const coeff = term.match(/^(\d+)(?=x|\(|$)/)
+      if (coeff) {
+        const n = Number(coeff[1])
+        if (n !== 1) pieces.push(String(n))
+        term = term.slice(coeff[1].length)
+      }
+      if (term === '(x)') term = 'x'
+      term = term.replace(/\^1$/, '')
+      if (term === 'x^1') term = 'x'
+      if (term) pieces.push(term)
+    }
+    pieces.sort()
+    return `${sign}|${pieces.join('*')}`
+  }
+
+  function textsMatch(givenRaw, targetRaw) {
+    const given = normalizeAnswerText(givenRaw)
+    const target = normalizeAnswerText(targetRaw)
+    if (!target) return false
+    if (given === target) return true
+    const givenKey = productKey(givenRaw)
+    const targetKey = productKey(targetRaw)
+    return Boolean(givenKey && targetKey && givenKey === targetKey)
+  }
+
+  function setKey(value) {
+    return normalizeAnswerText(value)
+      .split(/[,;]+/)
+      .filter(Boolean)
+      .sort()
+      .join('|')
   }
 
   function numbersClose(a, b, tolerance) {
@@ -59,14 +176,13 @@
     }
 
     if (part.type === 'text') {
-      const norm = (v) =>
-        normalizeText(v)
-          .replace(/\*/g, '')
-          .replace(/\s/g, '')
-          .replace(/\^/g, '^')
-      const given = norm(response)
-      const targets = [part.answer, ...(part.accept || [])].map(norm)
-      const correct = targets.some((t) => t === given || (t.length > 3 && given.includes(t)))
+      const targets = [part.answer, ...(part.accept || [])]
+      const setMode = part.match === 'set'
+      const listMatch = setMode
+        ? targets.some((t) => setKey(response) === setKey(t))
+        : targets.some((t) => textsMatch(response, t))
+      const custom = typeof part.check === 'function' && part.check(response)
+      const correct = listMatch || custom
       return {
         correct,
         earned: correct ? 1 : 0,
