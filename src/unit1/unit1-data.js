@@ -478,6 +478,7 @@
     subtitle: 'Polynomial and rational functions',
     totalPoints: 45,
     questionCount: 40,
+    note: 'This test scales in difficulty as the questions progress. At the beginning, the questions will test foundational concepts. Near the end, there will be difficult extension questions that test deep understanding and your ability to connect multiple concepts together. These final questions may extend past the difficulty required for the AP exam; therefore, do not be discouraged if you are unable to solve them.',
     instructions: [
       '40 questions · 45 points total · one question at a time.',
       'No calculator on questions 1–24. A graphing calculator is allowed on questions 25–40.',

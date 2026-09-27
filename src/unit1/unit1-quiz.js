@@ -33,6 +33,41 @@ function emptyResponse(question) {
   return ''
 }
 
+function describeAnswer(item, raw, expectedDisplay) {
+  const blank = raw === undefined || raw === null || String(raw).trim() === ''
+  if (item.type === 'mc') {
+    const letter = blank ? '' : String(raw).trim().toUpperCase()
+    const index = LETTERS.indexOf(letter)
+    const choice = index >= 0 ? item.choices?.[index] : ''
+    const yours = blank ? 'No answer' : choice ? `${letter}. ${choice}` : letter
+    const expectedLetter = String(item.answer ?? '').trim().toUpperCase()
+    const expectedIndex = LETTERS.indexOf(expectedLetter)
+    const expectedChoice = expectedIndex >= 0 ? item.choices?.[expectedIndex] : ''
+    const correct = expectedChoice ? `${expectedLetter}. ${expectedChoice}` : expectedLetter
+    return { yours, correct }
+  }
+  return {
+    yours: blank ? 'No answer' : String(raw),
+    correct: String(item.answerDisplay ?? expectedDisplay ?? item.answer ?? ''),
+  }
+}
+
+function renderAnswerCompare(item, raw, expectedDisplay, correct) {
+  const described = describeAnswer(item, raw, expectedDisplay)
+  return `
+    <div class="unit1-review-grid">
+      <div class="unit1-review-box ${correct ? 'ok' : 'no'}">
+        <span class="unit1-review-label">Your answer</span>
+        <p>${escapeHtml(described.yours)}</p>
+      </div>
+      <div class="unit1-review-box key">
+        <span class="unit1-review-label">Correct answer</span>
+        <p>${escapeHtml(described.correct)}</p>
+      </div>
+    </div>
+  `
+}
+
 export function initUnit1Quiz(container) {
   const UNIT1 = getUnit1()
   const grader = getGrader()
@@ -42,6 +77,7 @@ export function initUnit1Quiz(container) {
     responses: Object.fromEntries(UNIT1.questions.map((q) => [q.id, emptyResponse(q)])),
     checked: {},
     results: null,
+    reviewId: null,
   }
 
   function currentQuestion() {
@@ -65,6 +101,7 @@ export function initUnit1Quiz(container) {
           <h2>${escapeHtml(UNIT1.title)}</h2>
           <p class="unit1-sub">${escapeHtml(UNIT1.subtitle)}</p>
         </header>
+        ${UNIT1.note ? `<p class="unit1-note">${escapeHtml(UNIT1.note)}</p>` : ''}
         <ul class="unit1-instructions">
           ${UNIT1.instructions.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
         </ul>
@@ -289,9 +326,42 @@ export function initUnit1Quiz(container) {
     })
   }
 
+  function renderReview(question, result) {
+    const response = state.responses[question.id]
+    let body = ''
+    if (question.type === 'multipart') {
+      const responses = Array.isArray(response) ? response : []
+      body = question.parts
+        .map((part, index) => {
+          const partResult = result.partResults?.[index]
+          return `
+            <div class="unit1-review-part">
+              <p class="unit1-review-part-prompt"><strong>${escapeHtml(part.label)}.</strong> ${escapeHtml(part.prompt)}</p>
+              ${renderAnswerCompare(part, responses[index], partResult?.expected, Boolean(partResult?.correct))}
+            </div>
+          `
+        })
+        .join('')
+    } else {
+      body = renderAnswerCompare(question, response, result.expected, result.correct)
+    }
+
+    return `
+      <article class="unit1-review" id="unit1-review">
+        <p class="unit1-progress">Question ${question.id} review</p>
+        <h3 class="unit1-q-title">${escapeHtml(question.topic)}</h3>
+        ${question.prompt ? `<p class="unit1-prompt">${escapeHtml(question.prompt)}</p>` : ''}
+        ${body}
+        <p class="unit1-review-score">${result.earned} / ${result.possible} pt</p>
+      </article>
+    `
+  }
+
   function renderResults() {
     const { earned, possible, byQuestion } = state.results
     const pct = possible ? Math.round((earned / possible) * 100) : 0
+    const reviewQuestion = UNIT1.questions.find((item) => item.id === state.reviewId)
+    const reviewResult = byQuestion.find((item) => item.id === state.reviewId)
 
     container.innerHTML = `
       <div class="unit1-quiz">
@@ -299,18 +369,20 @@ export function initUnit1Quiz(container) {
           <h2>Assessment complete</h2>
           <p class="unit1-score">${earned} / ${possible} points (${pct}%)</p>
         </header>
-        <p class="unit1-meta">Per-question results use check-answer grading. Multipart items: half credit at 50%+ parts correct.</p>
+        <p class="unit1-meta">Select a question to see what you entered and the correct answer. Multipart items: half credit at 50%+ parts correct.</p>
+        ${reviewQuestion && reviewResult ? renderReview(reviewQuestion, reviewResult) : ''}
         <div class="unit1-results-list">
           ${byQuestion
             .map((r) => {
               const q = UNIT1.questions.find((item) => item.id === r.id)
               const cls = r.correct ? 'ok' : r.earned > 0 ? 'partial' : 'no'
+              const active = r.id === state.reviewId ? ' active' : ''
               return `
-                <div class="unit1-result-row ${cls}">
+                <button type="button" class="unit1-result-row ${cls}${active}" data-review="${r.id}" aria-expanded="${r.id === state.reviewId}">
                   <span>Q${r.id}</span>
                   <span>${r.earned}/${r.possible}</span>
                   <span class="unit1-result-topic">${escapeHtml(q?.topic ?? '')}</span>
-                </div>
+                </button>
               `
             })
             .join('')}
@@ -321,12 +393,24 @@ export function initUnit1Quiz(container) {
       </div>
     `
 
+    container.querySelectorAll('.unit1-result-row').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.review)
+        state.reviewId = state.reviewId === id ? null : id
+        render()
+        if (state.reviewId) {
+          container.querySelector('#unit1-review')?.scrollIntoView({ block: 'nearest' })
+        }
+      })
+    })
+
     container.querySelector('.unit1-restart')?.addEventListener('click', () => {
       state.phase = 'intro'
       state.index = 0
       state.responses = Object.fromEntries(UNIT1.questions.map((q) => [q.id, emptyResponse(q)]))
       state.checked = {}
       state.results = null
+      state.reviewId = null
       render()
     })
   }
