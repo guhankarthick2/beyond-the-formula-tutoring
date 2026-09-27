@@ -5,6 +5,7 @@
 import './unit1-quiz.css'
 import './unit1-data.js'
 import './unit1-grader.js'
+import { UNIT1_EXPLANATIONS } from './unit1-explanations.js'
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -50,6 +51,23 @@ function describeAnswer(item, raw, expectedDisplay) {
     yours: blank ? 'No answer' : String(raw),
     correct: String(item.answerDisplay ?? expectedDisplay ?? item.answer ?? ''),
   }
+}
+
+function explanationFor(assessment, question) {
+  if (question.explanation) return question.explanation
+  if (assessment?.id === 'ap-precal-unit-1') return UNIT1_EXPLANATIONS[question.id] || null
+  return null
+}
+
+function renderExplanation(note) {
+  if (!note?.steps) return ''
+  return `
+    <div class="unit1-explain">
+      <h4>Explanation</h4>
+      <p>${escapeHtml(note.steps)}</p>
+      ${note.mistakes ? `<h4>Common mistakes</h4><p>${escapeHtml(note.mistakes)}</p>` : ''}
+    </div>
+  `
 }
 
 function renderAnswerCompare(item, raw, expectedDisplay, correct) {
@@ -206,23 +224,36 @@ export function initUnit1Quiz(container, assessment) {
     return `<input type="text" class="unit1-input unit1-input-main" value="${escapeHtml(response)}" />`
   }
 
+  function renderSolution(question, result) {
+    const response = state.responses[question.id]
+    let compare = ''
+    if (question.type === 'multipart') {
+      const responses = Array.isArray(response) ? response : []
+      compare = question.parts
+        .map((part, index) => {
+          const partResult = result.partResults?.[index]
+          return `
+            <div class="unit1-review-part">
+              <p class="unit1-review-part-prompt"><strong>${escapeHtml(part.label)}.</strong> ${escapeHtml(part.prompt)}</p>
+              ${renderAnswerCompare(part, responses[index], partResult?.expected, Boolean(partResult?.correct))}
+            </div>
+          `
+        })
+        .join('')
+    } else {
+      compare = renderAnswerCompare(question, response, result.expected, result.correct)
+    }
+    return `${compare}${renderExplanation(explanationFor(UNIT1, question))}`
+  }
+
   function renderFeedback(question) {
     const result = state.checked[question.id]
     if (!result) return ''
     const cls = result.correct ? 'unit1-feedback-ok' : result.earned > 0 ? 'unit1-feedback-partial' : 'unit1-feedback-no'
-    let partsHtml = ''
-    if (result.partResults) {
-      partsHtml = `<ul class="unit1-part-feedback">${result.partResults
-        .map(
-          (pr, i) =>
-            `<li class="${pr.correct ? 'ok' : 'no'}"><strong>${question.parts[i].label}.</strong> ${escapeHtml(pr.feedback)}</li>`,
-        )
-        .join('')}</ul>`
-    }
     return `
       <div class="unit1-feedback ${cls}" role="status">
-        <strong>${result.earned} / ${result.possible} pt</strong> — ${escapeHtml(result.feedback)}
-        ${partsHtml}
+        <strong>${result.earned} / ${result.possible} pt</strong>
+        ${renderSolution(question, result)}
       </div>
     `
   }
@@ -327,31 +358,12 @@ export function initUnit1Quiz(container, assessment) {
   }
 
   function renderReview(question, result) {
-    const response = state.responses[question.id]
-    let body = ''
-    if (question.type === 'multipart') {
-      const responses = Array.isArray(response) ? response : []
-      body = question.parts
-        .map((part, index) => {
-          const partResult = result.partResults?.[index]
-          return `
-            <div class="unit1-review-part">
-              <p class="unit1-review-part-prompt"><strong>${escapeHtml(part.label)}.</strong> ${escapeHtml(part.prompt)}</p>
-              ${renderAnswerCompare(part, responses[index], partResult?.expected, Boolean(partResult?.correct))}
-            </div>
-          `
-        })
-        .join('')
-    } else {
-      body = renderAnswerCompare(question, response, result.expected, result.correct)
-    }
-
     return `
       <article class="unit1-review" id="unit1-review">
         <p class="unit1-progress">Question ${question.id} review</p>
         <h3 class="unit1-q-title">${escapeHtml(question.topic)}</h3>
         ${question.prompt ? `<p class="unit1-prompt">${escapeHtml(question.prompt)}</p>` : ''}
-        ${body}
+        ${renderSolution(question, result)}
         <p class="unit1-review-score">${result.earned} / ${result.possible} pt</p>
       </article>
     `
@@ -369,7 +381,7 @@ export function initUnit1Quiz(container, assessment) {
           <h2>Assessment complete</h2>
           <p class="unit1-score">${earned} / ${possible} points (${pct}%)</p>
         </header>
-        <p class="unit1-meta">Select a question to see what you entered and the correct answer. Multipart items: half credit at 50%+ parts correct.</p>
+        <p class="unit1-meta">Select a question to compare your answer with the correct one. Missed questions include the worked explanation. Multipart items: half credit at 50%+ parts correct.</p>
         ${reviewQuestion && reviewResult ? renderReview(reviewQuestion, reviewResult) : ''}
         <div class="unit1-results-list">
           ${byQuestion
