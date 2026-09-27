@@ -12,5 +12,17 @@ interface ImportMeta {
 }
 
 declare module '@/unit1/unit1-quiz.js' {
-  export function initUnit1Quiz(container: HTMLElement): () => void
+  export function initUnit1Quiz(container: HTMLElement, assessment?: object): () => void
+}
+
+declare module '@/unit1/unit1-13-data.js' {
+  export const UNIT1_TOPICS_13: object
+}
+
+declare module '@/unit1/unit1-13-14-data.js' {
+  export const UNIT1_TOPICS_13_14: object
+}
+
+declare module '@/unit1/unit1-11-12-data.js' {
+  export const UNIT1_TOPICS_11_12: object
 }

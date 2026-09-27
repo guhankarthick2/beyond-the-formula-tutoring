@@ -126,6 +126,30 @@ export const SUBJECTS: Subject[] = [
         href: '/students/precal/tests/unit-1',
       },
       {
+        id: 'precal-unit1-1-3',
+        kind: 'test',
+        title: 'AP Precalculus — Topics 1.1–1.3',
+        description:
+          '40-question assessment on change in tandem and rates of change, with per-question feedback.',
+        href: '/students/precal/tests/unit-1-1-3',
+      },
+      {
+        id: 'precal-unit1-13-14',
+        kind: 'test',
+        title: 'AP Precalculus — Topics 1.13–1.14',
+        description:
+          '40-question assessment on function model selection and construction, with per-question feedback.',
+        href: '/students/precal/tests/unit-1-13-14',
+      },
+      {
+        id: 'precal-unit1-11-12',
+        kind: 'test',
+        title: 'AP Precalculus — Topics 1.11–1.12',
+        description:
+          '40-question assessment on equivalent forms and transformations, with per-question feedback.',
+        href: '/students/precal/tests/unit-1-11-12',
+      },
+      {
         id: 'precal-youtube',
         kind: 'video',
         title: 'Beyond The Formula YouTube',

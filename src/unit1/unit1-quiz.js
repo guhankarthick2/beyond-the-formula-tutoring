@@ -68,8 +68,8 @@ function renderAnswerCompare(item, raw, expectedDisplay, correct) {
   `
 }
 
-export function initUnit1Quiz(container) {
-  const UNIT1 = getUnit1()
+export function initUnit1Quiz(container, assessment) {
+  const UNIT1 = assessment ?? getUnit1()
   const grader = getGrader()
   const state = {
     phase: 'intro',

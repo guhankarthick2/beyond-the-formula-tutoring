@@ -22,6 +22,9 @@ import { StudentHubPage, StudentSubjectPage } from '@/pages/StudentHubPage'
 import { StudentMySessionsPage } from '@/pages/StudentMySessionsPage'
 import { TermsOfServicePage } from '@/pages/TermsOfServicePage'
 import { Unit1TestPage } from '@/pages/Unit1TestPage'
+import { Unit1Topics13TestPage } from '@/pages/Unit1Topics13TestPage'
+import { Unit1Topics1314TestPage } from '@/pages/Unit1Topics1314TestPage'
+import { Unit1Topics1112TestPage } from '@/pages/Unit1Topics1112TestPage'
 
 export default function App() {
   return (
@@ -39,6 +42,9 @@ export default function App() {
                     <Route path="/students/resources/:subjectSlug" element={<ResourcesPage />} />
                     <Route path="/students/my-sessions" element={<StudentMySessionsPage />} />
                     <Route path="/students/precal/tests/unit-1" element={<Unit1TestPage />} />
+                    <Route path="/students/precal/tests/unit-1-1-3" element={<Unit1Topics13TestPage />} />
+                    <Route path="/students/precal/tests/unit-1-13-14" element={<Unit1Topics1314TestPage />} />
+                    <Route path="/students/precal/tests/unit-1-11-12" element={<Unit1Topics1112TestPage />} />
                     <Route path="/students/:subjectSlug" element={<StudentSubjectPage />} />
                     <Route path="/students/:subjectSlug/schedule" element={<SessionsPage />} />
                     <Route path="/students/:subjectSlug/past" element={<PastSessionsPage />} />

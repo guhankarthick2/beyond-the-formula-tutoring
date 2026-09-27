@@ -151,8 +151,8 @@ export function StudentSubjectPage() {
   const pastPath = `/students/${subject.slug}/past`
   const questionsPath = `/students/${subject.slug}/questions`
   const coursesPath = `/students/${subject.slug}/courses`
-  const testPath = `/students/${subject.slug}/tests/unit-1`
-  const hasTests = stats.tests > 0
+  const tests = subject.resources.filter((item) => item.kind === 'test' && !item.comingSoon)
+  const hasTests = tests.length > 0
 
   return (
     <section className="section">
@@ -258,9 +258,11 @@ export function StudentSubjectPage() {
           </p>
           <div className="btn-group">
             {hasTests ? (
-              <Link className="btn btn-primary" to={testPath}>
-                Take a test
-              </Link>
+              tests.map((test) => (
+                <Link key={test.id} className="btn btn-primary" to={test.href}>
+                  {test.title}
+                </Link>
+              ))
             ) : (
               <Link className="btn btn-secondary" to={resourcesPath}>
                 Materials &amp; tests

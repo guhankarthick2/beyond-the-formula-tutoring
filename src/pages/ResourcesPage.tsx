@@ -44,8 +44,8 @@ export function ResourcesPage() {
   }
 
   const pastPath = subject ? `/students/${subject.slug}/past` : ''
-  const testHref =
-    subject?.resources.find((r) => r.kind === 'test' && !r.comingSoon)?.href ?? ''
+  const tests =
+    subject?.resources.filter((item) => item.kind === 'test' && !item.comingSoon) ?? []
   const materials =
     subject?.resources.filter(
       (r) => r.kind === 'notes' || r.kind === 'link' || r.kind === 'video',
@@ -120,10 +120,14 @@ export function ResourcesPage() {
                   ? `Practice assessments for ${subject.shortName}.`
                   : `Tests for ${subject.shortName} will appear here when ready.`}
               </p>
-              {testHref ? (
-                <Link className="btn btn-primary" to={testHref}>
-                  Take a test
-                </Link>
+              {tests.length > 0 ? (
+                <div className="btn-group">
+                  {tests.map((test) => (
+                    <Link key={test.id} className="btn btn-primary" to={test.href}>
+                      {test.title}
+                    </Link>
+                  ))}
+                </div>
               ) : (
                 <span className="btn btn-secondary" aria-disabled="true">
                   Coming soon
