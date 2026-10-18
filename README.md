@@ -149,6 +149,7 @@ If you already ran an older `schema.sql`, also run newer files under `supabase/m
 | Mentors | Words-first public directory (`/mentors`), ranked by sessions led; profiles at `/mentors/p/:slug`; apply at `/mentors/join` |
 | Workspace | Approved mentors manage slots, roster, homework, and public bio (`/mentors/dashboard`) |
 | Admin | Approve mentors, moderate sessions/messages, manage courses, review reports, hard-delete Q&A threads and answers |
+| Site tour | New accounts get a skippable step-by-step tour after signing up (needs migration `024_onboarding_tutorial.sql`; existing accounts are marked as done). Anyone can replay it from **Take the site tour** in the footer (`/?tour=1`) |
 
 ## Q&A email notify (optional)
 

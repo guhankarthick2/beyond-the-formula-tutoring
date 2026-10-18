@@ -1,8 +1,12 @@
+import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { useAdminReportsInbox } from '@/lib/adminReportsInbox'
 import { useMessageInbox } from '@/lib/messageInbox'
 import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
+import { useSmoothScroll } from '@/lib/smoothScroll'
+import { youtubeChannelUrl } from '@/lib/supabase'
+import { OnboardingTour } from '@/components/OnboardingTour'
 
 function navClass(base: string, isActive: boolean) {
   return isActive ? `${base} active` : base
@@ -15,6 +19,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { reportCount } = useAdminReportsInbox()
   const navigate = useNavigate()
   const location = useLocation()
+  useSmoothScroll()
   const path = location.pathname
   const onMySessions = path.includes('/students/my-sessions')
   const onMentorDashboard = path.includes('/mentors/dashboard')
@@ -24,6 +29,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
     path === '/students' || (path.startsWith('/students/') && !path.startsWith('/students/my-sessions'))
   const mentorsNavActive =
     path === '/mentors' || path.startsWith('/mentors/join') || path.startsWith('/mentors/p/')
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // Phone menu closes on navigation and on Escape.
+  useEffect(() => setMenuOpen(false), [path])
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   async function onSignOut() {
     await signOut()
@@ -35,7 +52,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
-      <header className="site-header">
+      <header className={menuOpen ? 'site-header menu-open' : 'site-header'}>
         <div className="header-inner">
           <Link to="/" className="brand">
             <img
@@ -50,12 +67,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <p className="brand-tag">Math is beyond the formula · free nonprofit tutoring</p>
             </span>
           </Link>
-          <nav className="nav" aria-label="Primary">
+          <button
+            type="button"
+            className="menu-toggle"
+            aria-expanded={menuOpen}
+            aria-controls="primary-nav"
+            data-tour="student-hub"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span className="menu-toggle-bars" aria-hidden="true" />
+            <span className="visually-hidden">{menuOpen ? 'Close menu' : 'Open menu'}</span>
+          </button>
+          <nav id="primary-nav" className="nav" aria-label="Primary">
             <NavLink className={({ isActive }) => navClass('btn btn-ghost', isActive)} to="/" end>
               Home
             </NavLink>
             <Link
               to="/students"
+              data-tour="student-hub"
               className={navClass('btn btn-ghost', studentsNavActive)}
               aria-current={studentsNavActive ? 'page' : undefined}
             >
@@ -176,22 +205,46 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <footer className="site-footer">
-        <p>Beyond The Formula — free nonprofit math & STEM tutoring</p>
-        <p className="footer-links">
-          {!isApprovedTutor && (
-            <>
+        <div className="footer-inner">
+          <div className="footer-brand">
+            <Link to="/" className="footer-logo">
+              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" width={40} height={40} />
+              <span>Beyond The Formula</span>
+            </Link>
+            <p className="footer-tagline">Math is beyond the formula.</p>
+            <p className="footer-mission">
+              Free nonprofit math &amp; STEM tutoring that teaches concepts, not memorization.
+            </p>
+          </div>
+          <nav className="footer-col" aria-label="Learn">
+            <h2>Learn</h2>
+            <Link to="/students">Student hub</Link>
+            <Link to="/mentors">Meet mentors</Link>
+            <a href={youtubeChannelUrl} rel="noopener noreferrer">
+              Watch lessons
+            </a>
+          </nav>
+          <nav className="footer-col" aria-label="Get involved">
+            <h2>Get involved</h2>
+            {isApprovedTutor ? (
+              <Link to="/mentors/dashboard">Workspace</Link>
+            ) : (
               <Link to="/mentors/join">Become a mentor</Link>
-              <span aria-hidden="true"> · </span>
-            </>
-          )}
-          <Link to="/privacy">Privacy Policy</Link>
-          <span aria-hidden="true"> · </span>
-          <Link to="/terms">Terms of Service</Link>
-        </p>
-        <p className="muted footer-note">
-          Display names only. No personal contact details on public pages.
-        </p>
+            )}
+            <Link to="/?tour=1">Take the site tour</Link>
+          </nav>
+          <nav className="footer-col" aria-label="Legal">
+            <h2>Legal</h2>
+            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="/terms">Terms of Service</Link>
+          </nav>
+        </div>
+        <div className="footer-bottom">
+          <p>© {new Date().getFullYear()} Beyond The Formula — free nonprofit math &amp; STEM tutoring</p>
+          <p>Display names only. No personal contact details on public pages.</p>
+        </div>
       </footer>
+      <OnboardingTour />
     </>
   )
 }

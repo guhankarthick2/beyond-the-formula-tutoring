@@ -1465,3 +1465,7 @@ end;
 $$;
 
 grant execute on function public.admin_set_mentor_profile(uuid, text, text, text, boolean, text) to authenticated;
+
+-- Post-signup site tour (migration 024_onboarding_tutorial.sql). NULL = tour not seen yet.
+alter table public.profiles
+  add column if not exists tutorial_completed_at timestamptz;

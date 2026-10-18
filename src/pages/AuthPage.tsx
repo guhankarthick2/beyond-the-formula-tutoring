@@ -273,246 +273,264 @@ export function AuthPage() {
   }
 
   return (
-    <section className="section" style={{ maxWidth: '28rem' }}>
-      <h1 className="page-title">
-        {mode === 'register'
-          ? 'Create account'
-          : mode === 'forgot'
-            ? 'Reset password'
-            : mode === 'recovery'
-              ? 'Set new password'
-              : 'Sign in'}
-      </h1>
-      <p className="lead">
-        {mode === 'register'
-          ? 'Register with email, or continue with Google or GitHub. We never show your email on the site.'
-          : mode === 'forgot'
-            ? 'We will email you a secure link to choose a new password.'
-            : mode === 'recovery'
-              ? 'Enter a new password for your account.'
-              : 'Sign in with Google, GitHub, or email. Sessions refresh quietly for about a week.'}
-      </p>
+    <section className="section auth-shell">
+      <aside className="auth-aside" aria-hidden="true">
+        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" width={56} height={56} />
+        <p className="auth-aside-title">Math is beyond the formula.</p>
+        <ul className="auth-aside-list">
+          <li>
+            <span>Σ</span> Practice with worked explanations
+          </li>
+          <li>
+            <span>∞</span> Believe you can solve every problem
+          </li>
+          <li>
+            <span>√</span> Understand concepts, not memorize them
+          </li>
+        </ul>
+        <p className="auth-aside-foot">100% free · nonprofit · run by volunteer mentors</p>
+      </aside>
+      <div className="auth-panel">
+        <h1 className="page-title">
+          {mode === 'register'
+            ? 'Create account'
+            : mode === 'forgot'
+              ? 'Reset password'
+              : mode === 'recovery'
+                ? 'Set new password'
+                : 'Sign in'}
+        </h1>
+        <p className="lead">
+          {mode === 'register'
+            ? 'Register with email, or continue with Google or GitHub. We never show your email on the site.'
+            : mode === 'forgot'
+              ? 'We will email you a secure link to choose a new password.'
+              : mode === 'recovery'
+                ? 'Enter a new password for your account.'
+                : 'Sign in with Google, GitHub, or email. Sessions refresh quietly for about a week.'}
+        </p>
 
-      {!configured && (
-        <div className="alert alert-warn" style={{ marginBottom: '1rem' }}>
-          Add Supabase keys to <code>.env</code> before signing in.
-        </div>
-      )}
+        {!configured && (
+          <div className="alert alert-warn" style={{ marginBottom: '1rem' }}>
+            Add Supabase keys to <code>.env</code> before signing in.
+          </div>
+        )}
 
-      {mode !== 'recovery' && mode !== 'forgot' && (
-        <div className="auth-tabs" role="tablist" aria-label="Auth mode">
-          <button
-            type="button"
-            role="tab"
-            className={mode === 'signin' ? 'auth-tab active' : 'auth-tab'}
-            aria-selected={mode === 'signin'}
-            onClick={() => switchMode('signin')}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            role="tab"
-            className={mode === 'register' ? 'auth-tab active' : 'auth-tab'}
-            aria-selected={mode === 'register'}
-            onClick={() => switchMode('register')}
-          >
-            Register
-          </button>
-        </div>
-      )}
-
-      {mode !== 'recovery' && mode !== 'forgot' && (
-        <>
-          <div className="auth-oauth">
+        {mode !== 'recovery' && mode !== 'forgot' && (
+          <div className="auth-tabs" role="tablist" aria-label="Auth mode">
             <button
-              className="btn auth-oauth-btn auth-oauth-google"
               type="button"
-              disabled={busy || oauthBusy !== null || !configured}
-              onClick={() => void onGoogle()}
+              role="tab"
+              className={mode === 'signin' ? 'auth-tab active' : 'auth-tab'}
+              aria-selected={mode === 'signin'}
+              onClick={() => switchMode('signin')}
             >
-              <GoogleMark className="auth-oauth-mark" />
-              <span>{oauthBusy === 'google' ? 'Connecting…' : 'Continue with Google'}</span>
+              Sign in
             </button>
             <button
-              className="btn auth-oauth-btn auth-oauth-github"
               type="button"
-              disabled={busy || oauthBusy !== null || !configured}
-              onClick={() => void onGitHub()}
+              role="tab"
+              className={mode === 'register' ? 'auth-tab active' : 'auth-tab'}
+              aria-selected={mode === 'register'}
+              onClick={() => switchMode('register')}
             >
-              <GitHubMark className="auth-oauth-mark" />
-              <span>{oauthBusy === 'github' ? 'Connecting…' : 'Continue with GitHub'}</span>
+              Register
             </button>
           </div>
-          <div className="auth-divider" aria-hidden="true">
-            <span>or use email</span>
-          </div>
-        </>
-      )}
+        )}
 
-      {mode === 'signin' && (
-        <form className="form card" onSubmit={(e) => void onSignIn(e)}>
-          <label>
-            Email
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-            />
-          </label>
-          <label>
-            Password
-            <input
-              required
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              minLength={8}
-            />
-          </label>
-          {error && <div className="alert alert-error">{error}</div>}
-          {info && <div className="alert alert-ok">{info}</div>}
-          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
-          <button className="btn btn-ghost" type="button" onClick={() => switchMode('forgot')}>
-            Forgot password?
-          </button>
-        </form>
-      )}
-
-      {mode === 'register' && (
-        <form className="form card" onSubmit={(e) => void onRegister(e)}>
-          <label>
-            Display name
-            <input
-              required
-              minLength={2}
-              maxLength={40}
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. Alex P"
-              autoComplete="nickname"
-            />
-          </label>
-          <label>
-            Email
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-            />
-          </label>
-          {domainBlockMessage && (
-            <div className="alert alert-warn" role="status">
-              {domainBlockMessage}
+        {mode !== 'recovery' && mode !== 'forgot' && (
+          <>
+            <div className="auth-oauth">
+              <button
+                className="btn auth-oauth-btn auth-oauth-google"
+                type="button"
+                disabled={busy || oauthBusy !== null || !configured}
+                onClick={() => void onGoogle()}
+              >
+                <GoogleMark className="auth-oauth-mark" />
+                <span>{oauthBusy === 'google' ? 'Connecting…' : 'Continue with Google'}</span>
+              </button>
+              <button
+                className="btn auth-oauth-btn auth-oauth-github"
+                type="button"
+                disabled={busy || oauthBusy !== null || !configured}
+                onClick={() => void onGitHub()}
+              >
+                <GitHubMark className="auth-oauth-mark" />
+                <span>{oauthBusy === 'github' ? 'Connecting…' : 'Continue with GitHub'}</span>
+              </button>
             </div>
-          )}
-          <label>
-            Password
-            <input
-              required
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-            />
-          </label>
-          <label>
-            Confirm password
-            <input
-              required
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-            />
-          </label>
-          {error && <div className="alert alert-error">{error}</div>}
-          {info && <div className="alert alert-ok">{info}</div>}
-          <button
-            className="btn btn-primary"
-            type="submit"
-            disabled={busy || !configured || !!domainBlockMessage}
-          >
-            {busy ? 'Creating account…' : 'Create account'}
-          </button>
-        </form>
-      )}
-
-      {mode === 'forgot' && (
-        <form className="form card" onSubmit={(e) => void onForgot(e)}>
-          <label>
-            Email
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-            />
-          </label>
-          {domainBlockMessage && (
-            <div className="alert alert-warn" role="status">
-              {domainBlockMessage}
+            <div className="auth-divider" aria-hidden="true">
+              <span>or use email</span>
             </div>
-          )}
-          {error && <div className="alert alert-error">{error}</div>}
-          {info && <div className="alert alert-ok">{info}</div>}
-          <button
-            className="btn btn-primary"
-            type="submit"
-            disabled={busy || !configured || !!domainBlockMessage}
-          >
-            {busy ? 'Sending…' : 'Send reset link'}
-          </button>
-          <button className="btn btn-ghost" type="button" onClick={() => switchMode('signin')}>
-            Back to sign in
-          </button>
-        </form>
-      )}
+          </>
+        )}
 
-      {mode === 'recovery' && (
-        <form className="form card" onSubmit={(e) => void onRecovery(e)}>
-          <label>
-            New password
-            <input
-              required
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-            />
-          </label>
-          <label>
-            Confirm new password
-            <input
-              required
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-            />
-          </label>
-          {error && <div className="alert alert-error">{error}</div>}
-          {info && <div className="alert alert-ok">{info}</div>}
-          <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
-            {busy ? 'Saving…' : 'Update password'}
-          </button>
-        </form>
-      )}
+        {mode === 'signin' && (
+          <form className="form card" onSubmit={(e) => void onSignIn(e)}>
+            <label>
+              Email
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+              />
+            </label>
+            <label>
+              Password
+              <input
+                required
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                minLength={8}
+              />
+            </label>
+            {error && <div className="alert alert-error">{error}</div>}
+            {info && <div className="alert alert-ok">{info}</div>}
+            <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+            <button className="btn btn-ghost" type="button" onClick={() => switchMode('forgot')}>
+              Forgot password?
+            </button>
+          </form>
+        )}
+
+        {mode === 'register' && (
+          <form className="form card" onSubmit={(e) => void onRegister(e)}>
+            <label>
+              Display name
+              <input
+                required
+                minLength={2}
+                maxLength={40}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="e.g. Alex P"
+                autoComplete="nickname"
+              />
+            </label>
+            <label>
+              Email
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+              />
+            </label>
+            {domainBlockMessage && (
+              <div className="alert alert-warn" role="status">
+                {domainBlockMessage}
+              </div>
+            )}
+            <label>
+              Password
+              <input
+                required
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+              />
+            </label>
+            <label>
+              Confirm password
+              <input
+                required
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+              />
+            </label>
+            {error && <div className="alert alert-error">{error}</div>}
+            {info && <div className="alert alert-ok">{info}</div>}
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={busy || !configured || !!domainBlockMessage}
+            >
+              {busy ? 'Creating account…' : 'Create account'}
+            </button>
+          </form>
+        )}
+
+        {mode === 'forgot' && (
+          <form className="form card" onSubmit={(e) => void onForgot(e)}>
+            <label>
+              Email
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+              />
+            </label>
+            {domainBlockMessage && (
+              <div className="alert alert-warn" role="status">
+                {domainBlockMessage}
+              </div>
+            )}
+            {error && <div className="alert alert-error">{error}</div>}
+            {info && <div className="alert alert-ok">{info}</div>}
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={busy || !configured || !!domainBlockMessage}
+            >
+              {busy ? 'Sending…' : 'Send reset link'}
+            </button>
+            <button className="btn btn-ghost" type="button" onClick={() => switchMode('signin')}>
+              Back to sign in
+            </button>
+          </form>
+        )}
+
+        {mode === 'recovery' && (
+          <form className="form card" onSubmit={(e) => void onRecovery(e)}>
+            <label>
+              New password
+              <input
+                required
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+              />
+            </label>
+            <label>
+              Confirm new password
+              <input
+                required
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+              />
+            </label>
+            {error && <div className="alert alert-error">{error}</div>}
+            {info && <div className="alert alert-ok">{info}</div>}
+            <button className="btn btn-primary" type="submit" disabled={busy || !configured}>
+              {busy ? 'Saving…' : 'Update password'}
+            </button>
+          </form>
+        )}
+      </div>
     </section>
   )
 }

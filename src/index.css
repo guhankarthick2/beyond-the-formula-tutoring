@@ -34,6 +34,11 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Lenis animates scrolling itself; native smooth scrolling would fight it. */
+html.lenis {
+  scroll-behavior: auto;
+}
+
 body {
   margin: 0;
   min-height: 100vh;

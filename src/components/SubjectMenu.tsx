@@ -10,6 +10,8 @@ import {
   type SubjectLiveStats,
 } from '@/lib/subjectStats'
 
+const SUBJECT_GLYPHS: Record<string, string> = { precal: 'ƒ(x)', sat: '✓', algebra: 'x²', calculus: '∫' }
+
 export function SubjectMenu({
   getHref,
   activeSlug,
@@ -62,8 +64,8 @@ export function SubjectMenu({
             }`}
             onClick={() => pick(s.slug)}
           >
-            <span className="card-icon" aria-hidden>
-              📐
+            <span className="subject-glyph" aria-hidden>
+              {SUBJECT_GLYPHS[s.slug] ?? 'π'}
             </span>
             <h3>{s.shortName}</h3>
             <p>{s.description}</p>

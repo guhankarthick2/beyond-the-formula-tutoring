@@ -17,6 +17,8 @@ export interface Profile {
   mentor_focus?: string
   mentor_notes?: string
   mentor_public?: boolean
+  /** Absent until migration 024 runs; null means the post-signup tour has not been seen. */
+  tutorial_completed_at?: string | null
   created_at: string
   updated_at: string
 }
