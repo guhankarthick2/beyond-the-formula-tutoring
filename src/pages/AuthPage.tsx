@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { GitHubMark, GoogleMark } from '@/components/AuthProviderMarks'
+import { GraphField } from '@/components/GraphField'
 import { useAuth } from '@/lib/auth'
 import { blockedSignupDomainMessage } from '@/lib/emailDomains'
 
@@ -275,6 +276,7 @@ export function AuthPage() {
   return (
     <section className="section auth-shell">
       <aside className="auth-aside" aria-hidden="true">
+        <GraphField className="auth-graph" originX={0.42} originY={0.6} />
         <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" width={56} height={56} />
         <p className="auth-aside-title">Math is beyond the formula.</p>
         <ul className="auth-aside-list">

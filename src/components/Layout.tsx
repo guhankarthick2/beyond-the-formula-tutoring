@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { useAdminReportsInbox } from '@/lib/adminReportsInbox'
 import { useMessageInbox } from '@/lib/messageInbox'
 import { questionPath, useOpenQuestionsInbox } from '@/lib/openQuestionsInbox'
-import { useSmoothScroll } from '@/lib/smoothScroll'
+import { setScrollLocked, useSmoothScroll } from '@/lib/smoothScroll'
 import { youtubeChannelUrl } from '@/lib/supabase'
 import { OnboardingTour } from '@/components/OnboardingTour'
 
@@ -30,17 +30,84 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const mentorsNavActive =
     path === '/mentors' || path.startsWith('/mentors/join') || path.startsWith('/mentors/p/')
   const [menuOpen, setMenuOpen] = useState(false)
+  const navRef = useRef<HTMLElement>(null)
+  const pillRef = useRef<HTMLSpanElement>(null)
+  const progressRef = useRef<HTMLSpanElement>(null)
+  const wordmarkRef = useRef<HTMLSpanElement>(null)
 
-  // Phone menu closes on navigation and on Escape.
+  // Phone menu closes on navigation, on Escape, and when the window grows past the phone layout.
   useEffect(() => setMenuOpen(false), [path])
   useEffect(() => {
+    setScrollLocked(menuOpen)
     if (!menuOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenuOpen(false)
     }
+    const wide = window.matchMedia('(min-width: 961px)')
+    const onWide = () => {
+      if (wide.matches) setMenuOpen(false)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    wide.addEventListener('change', onWide)
+    return () => {
+      setScrollLocked(false)
+      window.removeEventListener('keydown', onKey)
+      wide.removeEventListener('change', onWide)
+    }
   }, [menuOpen])
+
+  // Slide the lime pill under the active nav link; re-measure on resize and once web fonts land.
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    const pill = pillRef.current
+    if (!nav || !pill) return
+    const place = () => {
+      const active = nav.querySelector<HTMLElement>('.btn-ghost.active, .btn-ghost[aria-current="page"]')
+      if (!active) {
+        pill.style.clipPath = 'inset(50% 50% 50% 50% round 12px)'
+        return
+      }
+      const n = nav.getBoundingClientRect()
+      const a = active.getBoundingClientRect()
+      pill.style.clipPath = `inset(${a.top - n.top}px ${n.right - a.right}px ${n.bottom - a.bottom}px ${a.left - n.left}px round 12px)`
+      // Enable the slide only after the first placement, so the pill never flies in from nowhere.
+      requestAnimationFrame(() => pill.setAttribute('data-ready', ''))
+    }
+    place()
+    void document.fonts?.ready.then(place)
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [path, user, profile?.display_name, isApprovedTutor, isAdmin, unreadCount, openCount, reportCount])
+
+  // Scroll-linked details: the progress line in the header and the footer wordmark filling with lime.
+  useEffect(() => {
+    let raf = 0
+    const update = () => {
+      raf = 0
+      const fill = wordmarkRef.current
+      if (fill) {
+        const r = fill.getBoundingClientRect()
+        const p = Math.min(1, Math.max(0, (window.innerHeight - r.top) / r.height))
+        fill.style.clipPath = `inset(0 ${(100 - p * 100).toFixed(2)}% 0 0)`
+      }
+      const max = document.documentElement.scrollHeight - window.innerHeight
+      progressRef.current?.style.setProperty(
+        'transform',
+        `scaleX(${max > 0 ? Math.min(1, window.scrollY / max).toFixed(4) : 0})`,
+      )
+    }
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update)
+    }
+    update()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [path])
 
   async function onSignOut() {
     await signOut()
@@ -78,7 +145,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="menu-toggle-bars" aria-hidden="true" />
             <span className="visually-hidden">{menuOpen ? 'Close menu' : 'Open menu'}</span>
           </button>
-          <nav id="primary-nav" className="nav" aria-label="Primary">
+          <nav id="primary-nav" className="nav" aria-label="Primary" ref={navRef}>
+            <span className="nav-indicator" ref={pillRef} aria-hidden="true" />
             <NavLink className={({ isActive }) => navClass('btn btn-ghost', isActive)} to="/" end>
               Home
             </NavLink>
@@ -161,6 +229,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </NavLink>
             )}
           </nav>
+          <span className="scroll-progress" ref={progressRef} aria-hidden="true" />
         </div>
       </header>
       {user && unreadCount > 0 && !onMySessions && (
@@ -201,7 +270,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </p>
         </div>
       )}
-      <main id="main-content" className="main">
+      <main id="main-content" className={path === '/' ? 'main main-full' : 'main'}>
         {children}
       </main>
       <footer className="site-footer">
@@ -243,6 +312,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <p>© {new Date().getFullYear()} Beyond The Formula — free nonprofit math &amp; STEM tutoring</p>
           <p>Display names only. No personal contact details on public pages.</p>
         </div>
+        <p className="footer-wordmark" aria-hidden="true">
+          <span>beyond the formula</span>
+          <span ref={wordmarkRef}>beyond the formula</span>
+        </p>
       </footer>
       <OnboardingTour />
     </>

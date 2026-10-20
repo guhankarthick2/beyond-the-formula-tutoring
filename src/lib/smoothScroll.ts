@@ -41,6 +41,13 @@ export function useSmoothScroll() {
   }, [pathname])
 }
 
+/** Freezes page scrolling, e.g. while the phone menu covers the screen. */
+export function setScrollLocked(locked: boolean) {
+  document.documentElement.classList.toggle('scroll-locked', locked)
+  if (locked) lenis?.stop()
+  else lenis?.start()
+}
+
 /** Scroll so `el` sits comfortably in view. Resolves when the scroll settles. */
 export function scrollToElement(el: Element, offset = -120): Promise<void> {
   return new Promise((resolve) => {

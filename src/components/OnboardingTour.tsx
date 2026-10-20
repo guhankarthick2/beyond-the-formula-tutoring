@@ -318,7 +318,7 @@ export function OnboardingTour() {
       <div className={step.target ? 'tour-scrim' : 'tour-scrim tour-scrim-solid'} aria-hidden="true" />
       <div className="tour-hole" ref={holeRef} aria-hidden="true" />
       <div
-        className="tour-card"
+        className="tour-card on-ink"
         ref={cardRef}
         role="dialog"
         aria-modal="true"
